@@ -1,0 +1,1714 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Canvas QTI Builder (DR)</title>
+<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@600;700&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  :root {
+    --navy: #1a1a2e; --paper: #f5f0e8; --red: #c0392b;
+    --green: #4a7c59; --gray: #6b7280; --light: #d1cdc4;
+    --white: #ffffff; --line-h: 28px;
+  }
+  body { background: var(--navy); color: var(--navy); font-family: 'Inter', sans-serif; font-size: 14px; min-height: 100vh; }
+
+  header { background: var(--navy); padding: 20px 32px 18px; display: flex; align-items: baseline; gap: 16px; border-bottom: 3px solid var(--red); }
+  header h1 { font-family: 'Playfair Display', serif; font-size: 22px; color: var(--paper); letter-spacing: -0.3px; }
+  header span { font-size: 12px; color: var(--gray); font-weight: 500; letter-spacing: 0.08em; text-transform: uppercase; }
+
+  .layout { display: grid; grid-template-columns: 1fr 320px; min-height: calc(100vh - 61px); }
+
+  .editor-panel { background: var(--paper); padding: 28px 32px 32px; display: flex; flex-direction: column; gap: 16px; }
+  .editor-label { font-size: 11px; font-weight: 600; letter-spacing: 0.1em; text-transform: uppercase; color: var(--gray); margin-bottom: 2px; }
+
+  .settings-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+  .settings-grid .full { grid-column: 1 / -1; }
+  .setting-field { display: flex; flex-direction: column; gap: 4px; }
+  .setting-field label { font-size: 11px; font-weight: 600; color: var(--gray); letter-spacing: 0.05em; }
+  .setting-field input, .setting-field select { font-family: 'Inter', sans-serif; font-size: 13px; padding: 7px 10px; border: 1.5px solid var(--light); border-radius: 3px; background: var(--white); color: var(--navy); outline: none; transition: border-color 0.15s; }
+  .setting-field input:focus, .setting-field select:focus { border-color: var(--navy); }
+  .checkbox-row { flex-direction: row; align-items: center; padding-top: 18px; }
+  .checkbox-row input[type="checkbox"] { width: auto; margin-right: 6px; }
+  .checkbox-row label { font-size: 12px; font-weight: 500; letter-spacing: 0; cursor: pointer; }
+
+  .notepad-wrap { position: relative; flex: 1; min-height: 400px; }
+  .notepad-wrap::before { content: ''; position: absolute; left: 48px; top: 0; bottom: 0; width: 2px; background: rgba(192,57,43,0.35); z-index: 1; pointer-events: none; }
+  #template-input {
+    width: 100%; height: 100%; min-height: 400px;
+    font-family: 'JetBrains Mono', monospace; font-size: 13px; line-height: var(--line-h);
+    padding: 8px 16px 8px 60px; border: 1.5px solid var(--light); border-radius: 3px; resize: vertical;
+    background-color: var(--white);
+    background-image: repeating-linear-gradient(to bottom, transparent, transparent calc(var(--line-h) - 1px), #e8e3da calc(var(--line-h) - 1px), #e8e3da var(--line-h));
+    background-size: 100% var(--line-h); color: var(--navy); outline: none; transition: border-color 0.15s;
+  }
+  #template-input:focus { border-color: var(--navy); }
+
+  .actions { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
+  .btn { font-family: 'Inter', sans-serif; font-size: 13px; font-weight: 600; padding: 10px 22px; border: none; border-radius: 3px; cursor: pointer; transition: all 0.15s; white-space: nowrap; }
+  .btn-primary { background: var(--navy); color: var(--paper); }
+  .btn-primary:hover { background: #2d2d4e; }
+  .btn-secondary { background: transparent; color: var(--gray); border: 1.5px solid var(--light); }
+  .btn-secondary:hover { border-color: var(--gray); color: var(--navy); }
+  .btn-download { background: var(--green); color: white; display: none; }
+  .btn-download:hover { background: #3d6b4a; }
+
+  #status { font-size: 13px; min-height: 20px; font-weight: 500; }
+  #status.error { color: var(--red); }
+  #status.success { color: var(--green); }
+  #status.info { color: var(--gray); }
+  #error-list { background: #fdf2f1; border-left: 3px solid var(--red); padding: 12px 16px; border-radius: 0 3px 3px 0; display: none; font-size: 13px; line-height: 1.7; color: #7b1f1a; }
+  #error-list ul { padding-left: 18px; margin-top: 4px; }
+
+  .ref-panel { background: var(--navy); color: var(--paper); padding: 24px 20px; overflow-y: auto; display: flex; flex-direction: column; gap: 20px; }
+  .ref-panel h2 { font-family: 'Playfair Display', serif; font-size: 16px; color: var(--paper); padding-bottom: 8px; border-bottom: 1px solid rgba(255,255,255,0.1); }
+  .ref-section { display: flex; flex-direction: column; gap: 8px; }
+  .ref-section h3 { font-size: 10px; font-weight: 600; letter-spacing: 0.12em; text-transform: uppercase; color: var(--red); }
+  .ref-block { background: rgba(255,255,255,0.05); border-radius: 4px; padding: 10px 12px; font-family: 'JetBrains Mono', monospace; font-size: 11px; line-height: 1.8; color: #c8c4bc; white-space: pre-wrap; word-break: break-word; }
+  .ref-block .kw { color: #e88c6a; }
+  .ref-block .correct { color: #7ec8a0; }
+  .ref-block .fb { color: #a8c4e0; }
+  .tip { font-size: 12px; color: #9ca3af; line-height: 1.6; }
+  .tip strong { color: var(--paper); font-weight: 600; }
+  .type-chips { display: flex; flex-wrap: wrap; gap: 6px; }
+  .chip { font-size: 10px; font-weight: 600; letter-spacing: 0.06em; padding: 3px 8px; border-radius: 20px; background: rgba(255,255,255,0.08); color: #c8c4bc; text-transform: uppercase; }
+  .insert-btn { font-size: 11px; font-weight: 600; padding: 5px 10px; border: 1px solid rgba(255,255,255,0.15); border-radius: 3px; background: transparent; color: #9ca3af; cursor: pointer; transition: all 0.12s; font-family: 'Inter', sans-serif; }
+  .insert-btn:hover { background: rgba(255,255,255,0.08); color: var(--paper); }
+
+  @media (max-width: 800px) {
+    .layout { grid-template-columns: 1fr; }
+    .ref-panel { order: -1; }
+    header { padding: 16px 20px; }
+    .editor-panel { padding: 20px; }
+    .settings-grid { grid-template-columns: 1fr; }
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>Canvas QTI Builder</h1>
+  <span>New Quizzes · by David Rochester (via AI) · Version 5.3</span>
+</header>
+
+<div class="layout">
+
+  <div class="editor-panel">
+    <div>
+      <div class="editor-label">Quiz settings</div>
+      <div class="settings-grid">
+        <div class="setting-field full">
+          <label>Quiz title</label>
+          <input id="quiz-title" type="text" placeholder="e.g. Week 3 — Tasmanian Tourism Quiz" />
+        </div>
+        <div class="setting-field">
+          <label>Time limit (minutes, 0 = none)</label>
+          <input id="quiz-time" type="number" min="0" value="0" />
+        </div>
+        <div class="setting-field">
+          <label>Allowed attempts (0 = unlimited)</label>
+          <input id="quiz-attempts" type="number" min="0" value="1" />
+        </div>
+        <div class="setting-field">
+          <label>Access passcode (leave blank = none)</label>
+          <input id="quiz-passcode" type="text" placeholder="optional" />
+        </div>
+        <div class="setting-field">
+          <label>Scoring policy</label>
+          <select id="quiz-scoring">
+            <option value="keep_highest">Keep highest score</option>
+            <option value="keep_latest">Keep latest score</option>
+          </select>
+        </div>
+        <div class="setting-field checkbox-row">
+          <input type="checkbox" id="quiz-shuffle" />
+          <label for="quiz-shuffle">Shuffle answers</label>
+        </div>
+        <div class="setting-field checkbox-row">
+          <input type="checkbox" id="quiz-show-correct" />
+          <label for="quiz-show-correct">Show correct answers after submission</label>
+        </div>
+      </div>
+    </div>
+
+    <div>
+      <div class="editor-label">Questions</div>
+      <div class="notepad-wrap">
+        <textarea id="template-input" spellcheck="false" placeholder="Paste or type your questions here using the format shown on the right..."></textarea>
+      </div>
+    </div>
+
+    <div class="actions">
+      <button class="btn btn-secondary" onclick="loadExample()">Load example</button>
+      <button class="btn btn-secondary" onclick="clearAll()">Clear</button>
+      <button class="btn btn-primary" onclick="buildQTI()">Generate QTI zip</button>
+      <button class="btn btn-download" id="download-btn">⬇ Download zip</button>
+    </div>
+    <div id="status" class="info"></div>
+    <div id="error-list"></div>
+  </div>
+
+  <div class="ref-panel">
+    <h2>Format guide</h2>
+
+    <div class="ref-section">
+      <h3>Question types</h3>
+      <div class="type-chips">
+        <span class="chip">MC</span><span class="chip">MA</span>
+        <span class="chip">FITB</span><span class="chip">FITB-M</span>
+        <span class="chip">MATCH</span><span class="chip">ORDER</span>
+        <span class="chip">CAT</span><span class="chip">ESSAY</span>
+        <span class="chip">FILE</span><span class="chip">TEXT</span>
+        <span class="chip">STIMULUS</span>
+      </div>
+    </div>
+
+    <div class="ref-section">
+      <h3>Stimulus (STIMULUS)</h3>
+      <div class="ref-block"><span class="kw">STIMULUS</span>
+TITLE: Stimulus 1
+INSTRUCTIONS: Read the passage and answer the questions that follow.
+Q: Paste your full passage here — even a long one.
+
+You can leave blank lines between paragraphs exactly as you'd paste
+from a Word document. They won't be mistaken for the start of a
+new question.
+
+Each paragraph gets its own line break when shown to students.
+
+MC | 1pt
+Q: A question about the stimulus.
+*A: Correct
+A: Wrong
+
+ESSAY | 2pt
+Q: Another question about the same stimulus.</div>
+      <p class="tip">Every gradable question after a <strong>STIMULUS</strong> block automatically attaches to it — until the next <strong>STIMULUS</strong> appears, or an explicit <strong>ENDSTIMULUS</strong> line, or the end of the quiz. A plain <strong>TEXT</strong> block in between does not break or extend a grouping — it's just unrelated filler. <strong>INSTRUCTIONS:</strong> is shown to students alongside the passage (optional). Paste multi-paragraph text straight in — blank lines between paragraphs are preserved as paragraph breaks, not read as a new question; a new block only starts when an actual question-type line (like <strong>MC</strong> or <strong>ESSAY</strong>) appears on its own.</p>
+    </div>
+
+    <div class="ref-section">
+      <h3>Multiple Choice (MC)</h3>
+      <div class="ref-block"><span class="kw">MC</span> | 1pt
+TITLE: Question title (optional)
+Q: Question text here
+A: A. Wrong answer
+<span class="correct">*A: B. Correct answer</span>
+A: C. Wrong answer</div>
+      <p class="tip">Prefix correct answer with <strong>*</strong>. One correct answer only. <strong>TITLE:</strong> sets name in Canvas. The <strong>A:</strong> / <strong>*A:</strong> prefix is just parser syntax and is never shown to students — type A./B./C. into the answer text itself, as shown above, if you want visible labels.</p>
+    </div>
+
+    <div class="ref-section">
+      <h3>True / False (use MC)</h3>
+      <div class="ref-block"><span class="kw">MC</span> | 1pt
+TITLE: Question title (optional)
+Q: Tasmania is an island state of Australia.
+<span class="correct">*A: True</span>
+A: False</div>
+      <p class="tip">Create True/False as MC with True and False as the two options.</p>
+    </div>
+
+    <div class="ref-section">
+      <h3>Multiple Answer (MA)</h3>
+      <div class="ref-block"><span class="kw">MA</span> | 1pt
+TITLE: Question title (optional)
+Q: Select all that apply.
+<span class="correct">*A: A. Correct option</span>
+A: B. Wrong option
+<span class="correct">*A: C. Also correct</span></div>
+      <p class="tip">Mark all correct answers with <strong>*</strong>. Partial credit awarded per correct answer. The <strong>A:</strong> / <strong>*A:</strong> prefix is just parser syntax and is never shown to students — to display A./B./C. labels on screen, type them as part of the answer text itself, like the example above.</p>
+    </div>
+
+    <div class="ref-section">
+      <h3>Fill in the Blank (FITB)</h3>
+      <div class="ref-block"><span class="kw">FITB</span> | 1pt
+TITLE: Question title (optional)
+Q: The capital of Tasmania is [city name].
+<span class="correct">*ANS: Hobart</span></div>
+      <p class="tip">One <strong>*ANS:</strong> line = exact match, single accepted answer.</p>
+      <div class="ref-block"><span class="kw">FITB</span> | 1pt
+Q: The capital of Tasmania is [city name].
+<span class="correct">*ANS: Hobart</span>
+<span class="correct">*ANS: hobart</span></div>
+      <p class="tip">Two or more <strong>*ANS:</strong> lines = "specify correct answers" — any of the listed strings is accepted.</p>
+      <div class="ref-block"><span class="kw">FITB</span> | 1pt
+Q: Ecology comes from the Greek root [word].
+<span class="correct">*ANS-CONTAINS: eco</span></div>
+      <p class="tip"><strong>-CONTAINS</strong>: correct if the student's answer contains this text anywhere.</p>
+      <div class="ref-block"><span class="kw">FITB</span> | 1pt
+Q: The capital of Tasmania is [city name].
+<span class="correct">*ANS-CLOSE: Hobart</span>
+DISTANCE: 2
+CASE: ignore</div>
+      <p class="tip"><strong>-CLOSE</strong>: tolerates typos (Levenshtein distance). <strong>DISTANCE:</strong> how many characters can differ (default 1). <strong>CASE: ignore</strong> makes it case-insensitive (default: case-sensitive, matching Canvas's own default).</p>
+      <div class="ref-block"><span class="kw">FITB</span> | 1pt
+Q: Choose the capital: [city name]
+<span class="correct">*ANS-DROPDOWN: Hobart | Sydney | Melbourne</span></div>
+      <p class="tip"><strong>-DROPDOWN</strong>: first item is correct, rest are distractors shown in a dropdown menu.</p>
+      <div class="ref-block"><span class="kw">FITB</span> | 1pt
+Q: Choose the capital: [city name]
+WORDBANK: Hobart | Launceston | Devonport
+<span class="correct">*ANS-WORDBANK: Hobart</span></div>
+      <p class="tip"><strong>WORDBANK:</strong> defines the full draggable word pool (correct + distractors) once. <strong>-WORDBANK:</strong> then just names which pool word is correct for this blank.</p>
+    </div>
+
+    <div class="ref-section">
+      <h3>Multi-Blank (FITB-M)</h3>
+      <div class="ref-block"><span class="kw">FITB-M</span> | 2pt
+TITLE: Question title (optional)
+Q: The capital is [city] (dropdown) and population is about [pop] (close enough).
+<span class="correct">*BLANK1-DROPDOWN: Hobart | Launceston | Devonport</span>
+<span class="correct">*BLANK2-CLOSE: 250000</span>
+BLANK2-DISTANCE: 2
+BLANK2-CASE: ignore</div>
+      <p class="tip">Each blank can use a <strong>different mode</strong> in the same question: plain <strong>*BLANKn:</strong> (exact — one line = single answer, multiple lines = specify correct answers), <strong>-CONTAINS</strong>, <strong>-CLOSE</strong> (+ <strong>BLANKn-DISTANCE:</strong>, <strong>BLANKn-CASE:</strong>), <strong>-DROPDOWN</strong>, or <strong>-WORDBANK</strong>. Points split evenly across blanks with partial credit.</p>
+      <div class="ref-block"><span class="kw">FITB-M</span> | 3pt
+Q: [one] plus [two] equals [three].
+WORDBANK: 1 | 2 | 3 | distractor
+<span class="correct">*BLANK1-WORDBANK: 1</span>
+<span class="correct">*BLANK2-WORDBANK: 2</span>
+<span class="correct">*BLANK3-WORDBANK: 3</span></div>
+      <p class="tip">All word-bank blanks in a question share <strong>one pool</strong> of draggable words (Canvas's real behaviour) — define it once with <strong>WORDBANK:</strong>, then each blank just names its correct word from that shared pool.</p>
+      <div class="ref-block"><span class="kw">FITB-M</span> | 1pt
+TITLE: True or False set
+Q: Decide if each statement is True or False.
+[blank1] The first statement goes here.
+[blank2] The second statement goes here.
+[blank3] The third statement goes here.
+<span class="correct">*BLANK1: True</span>
+<span class="correct">*BLANK2: False</span>
+<span class="correct">*BLANK3: True</span></div>
+      <p class="tip">Write each statement on its own line, straight after the first <strong>Q:</strong> line — do NOT put "Q:" in front of every line, only the very first. Repeating "Q:" silently overwrites earlier lines and can make blanks fail to import with no error shown. Each line you write becomes its own line for students too.</p>
+    </div>
+
+    <div class="ref-section">
+      <h3>FITB match types — all confirmed</h3>
+      <div class="type-chips">
+        <span class="chip">exact</span>
+        <span class="chip">contains</span>
+        <span class="chip">close</span>
+        <span class="chip">dropdown</span>
+        <span class="chip">wordbank</span>
+      </div>
+      <p class="tip">All five modes and their exact QTI structure (including the shared word-bank pool) were verified against a real Canvas-exported reference quiz covering every fill-in-the-blank variant.</p>
+    </div>
+
+    <div class="ref-section">
+
+
+      <h3>Matching (MATCH)</h3>
+      <div class="ref-block"><span class="kw">MATCH</span> | 4pt
+TITLE: Question title (optional)
+Q: Match each item to its description.
+PAIR: Term 1 | Description one
+PAIR: Term 2 | Description two
+PAIR: Term 3 | Description three</div>
+      <p class="tip">Each pair scores 1pt. Partial credit awarded.</p>
+    </div>
+
+    <div class="ref-section">
+      <h3>Ordering (ORDER)</h3>
+      <div class="ref-block"><span class="kw">ORDER</span> | 1pt
+TITLE: Question title (optional)
+Q: Put these steps in the correct order.
+LABEL-TOP: First
+LABEL-BOTTOM: Last
+<span class="correct">*ITEM: Step 1 (correct position 1)</span>
+<span class="correct">*ITEM: Step 2</span>
+<span class="correct">*ITEM: Step 3</span>
+<span class="correct">*ITEM: Step 4 (correct position 4)</span></div>
+      <p class="tip">List <strong>*ITEM:</strong> lines in the correct order. <strong>LABEL-TOP/BOTTOM</strong> add anchor labels (optional). Canvas shuffles items for students.</p>
+    </div>
+
+    <div class="ref-section">
+      <h3>Categorisation (CAT)</h3>
+      <div class="ref-block"><span class="kw">CAT</span> | 1pt
+TITLE: Question title (optional)
+Q: Sort these items into the correct categories.
+CAT: Category 1 | Item A | Item B
+CAT: Category 2 | Item C | Item D</div>
+      <p class="tip">Each <strong>CAT:</strong> line = one category. Items after the first <strong>|</strong> belong to that category. Partial credit per category.</p>
+    </div>
+
+    <div class="ref-section">
+      <h3>Essay (ESSAY)</h3>
+      <div class="ref-block"><span class="kw">ESSAY</span> | 5pt
+TITLE: Question title (optional)
+Q: Discuss the impact of tourism on Tasmania.
+<span class="fb">... General feedback shown to all after submission.</span>
+NOTES: Marking guide — instructor eyes only, never shown to students.
+RICHTEXT: no
+WORDCOUNT: yes
+WORDLIMIT: yes</div>
+      <p class="tip"><strong>...</strong> = student-visible feedback shown after submission. <strong>NOTES:</strong> = instructor-only marking notes, visible only in SpeedGrader — students never see this. <strong>RICHTEXT/WORDCOUNT/WORDLIMIT: yes/no</strong> (all default no). Word limit value set in Canvas after import.</p>
+    </div>
+
+    <div class="ref-section">
+      <h3>File Upload (FILE)</h3>
+      <div class="ref-block"><span class="kw">FILE</span> | 5pt
+TITLE: Question title (optional)
+Q: Upload your completed worksheet here.</div>
+      <p class="tip">Students see a file upload button. Requires manual grading.</p>
+    </div>
+
+    <div class="ref-section">
+      <h3>Text Block (TEXT)</h3>
+      <div class="ref-block"><span class="kw">TEXT</span>
+TITLE: title (use . if you want no title)
+Q: Read the passage below before answering...</div>
+      <p class="tip">No response, no points. Use for instructions, passages or section headers.</p>
+    </div>
+
+    <div class="ref-section">
+      <h3>Rules</h3>
+      <p class="tip">
+        • Separate questions with a <strong>blank line</strong><br>
+        • Points: <strong>MC | 2pt</strong> on the type line<br>
+        • <strong>TITLE:</strong> sets question name in Canvas (optional, all types)<br>
+        • <strong>[label]</strong> in Q: places input box inline (FITB/FITB-M)<br>
+        • FITB match modes: exact (default), <strong>-CONTAINS</strong>, <strong>-CLOSE</strong>, <strong>-DROPDOWN</strong>, <strong>-WORDBANK</strong><br>
+        • <strong>WORDBANK:</strong> line defines one shared word pool per question<br>
+        • <strong>...</strong> on ESSAY = general feedback after submission<br>
+        • <strong>NOTES:</strong> on ESSAY = instructor-only marking notes (SpeedGrader only)<br>
+        • <strong>STIMULUS</strong> block auto-attaches following questions until the next STIMULUS, an <strong>ENDSTIMULUS</strong> line, or end of quiz<br>
+        • Use plain hyphens (-) not em dashes (–) in question text<br>
+        • Lines starting with <strong>#</strong> are ignored (comments)
+      </p>
+    </div>
+
+    <button class="insert-btn" onclick="loadExample()">↙ Load full example into editor</button>
+  </div>
+</div>
+
+<script>
+// ─────────────────────────────────────────────
+// EXAMPLE
+// ─────────────────────────────────────────────
+const EXAMPLE = `# Tasmania Tourism Quiz
+
+STIMULUS
+TITLE: Stimulus 1
+INSTRUCTIONS: Read the passage and answer the two questions that follow.
+Q: MONA (Museum of Old and New Art) opened in Hobart in 2011, founded by professional gambler David Walsh. It is built into a sandstone cliff above the Derwent River and has become one of Tasmania's biggest tourism drawcards, credited with reshaping Hobart's economy and cultural identity.
+
+MC | 1pt
+TITLE: 1. MONA opening year
+Q: 1. In what year did MONA open?
+A: A. 2005
+*A: B. 2011
+A: C. 2015
+A: D. 2018
+
+ESSAY | 2pt
+TITLE: 2. MONA impact
+Q: 2. Explain how MONA has affected Hobart's economy and cultural identity, using details from the passage.
+
+ENDSTIMULUS
+
+MC | 1pt
+TITLE: Martin Cash Escape
+Q: 3. In which year did bushranger Martin Cash escape from Port Arthur?
+A: A. 1835
+*A: B. 1843
+A: C. 1852
+A: D. 1860
+
+MC | 1pt
+TITLE: Cradle Mountain UNESCO
+Q: 4. Cradle Mountain-Lake St Clair National Park is part of the UNESCO World Heritage Area.
+*A: True
+A: False
+
+MA | 1pt
+TITLE: MONA Facts
+Q: 5. Which THREE statements about MONA are correct? (Select all that apply)
+*A: A. MONA is built underground into a sandstone cliff above the Derwent River.
+A: B. MONA was funded by the Tasmanian State Government.
+*A: C. MONA was founded by professional gambler David Walsh.
+*A: D. MONA hosts the annual MONA FOMA festival.
+A: E. MONA's collection focuses exclusively on Indigenous Australian art.
+
+FITB | 1pt
+TITLE: Wineglass Bay
+Q: 6. Freycinet National Park is famous for its beach called [beach name].
+*ANS: Wineglass Bay
+
+FITB-M | 2pt
+TITLE: Port Arthur Massacre Facts
+Q: 7. The Port Arthur massacre occurred in [year] and the state capital is [city].
+*BLANK2-DROPDOWN: 1996| 1997 | 1995
+*BLANK1-CLOSE: Hobart
+BLANK1-DISTANCE: 1
+
+FITB-M | 3pt
+TITLE: Tasmania Word Bank
+Q: 8. The three largest cities in Tasmania from largest to smallest are [city1], [city2] and [city3].
+WORDBANK: Hobart | Launceston | Devonport | Burnie | Perth
+*BLANK1-WORDBANK: Hobart
+*BLANK2-WORDBANK: Launceston
+*BLANK3-WORDBANK: Devonport
+
+MATCH | 4pt
+TITLE: Tasmanian Landmarks
+Q: 9. Match each Tasmanian destination to its description.
+PAIR: Salamanca Market | Weekly outdoor market in historic sandstone warehouses, Hobart waterfront
+PAIR: Russell Falls | Tiered waterfall in Mount Field National Park
+PAIR: The Nut, Stanley | Flat-topped volcanic plug on the northwest coast
+PAIR: Tahune AirWalk | Walkway 50 metres above the Huon Valley rainforest floor
+
+ORDER | 1pt
+TITLE: Overland Track Order
+Q: 10. Put the following Overland Track landmarks in order from south (Lake St Clair) to north (Cradle Mountain).
+LABEL-TOP: South - Lake St Clair end
+LABEL-BOTTOM: North - Cradle Mountain end
+*ITEM: Lake St Clair (Narcissus Bay)
+*ITEM: Pine Forest Moor
+*ITEM: Pelion Plains / Mt Ossa
+*ITEM: Cradle Mountain
+
+CAT | 1pt
+TITLE: East or West Coast
+Q: 11. Sort these Tasmanian destinations into East Coast or West Coast.
+CAT: East Coast | Wineglass Bay | Bay of Fires | Freycinet Peninsula
+CAT: West Coast | Queenstown | Strahan | Gordon River
+
+TEXT
+TITLE: Instructions
+Q: The following question is an essay. Write in full sentences and refer to specific Tasmanian examples.
+
+ESSAY | 5pt
+TITLE: Tourism Impact Essay
+Q: 12. Discuss BOTH the positive and negative impacts of increased tourism on Tasmania. Refer to at least one specific destination. (5 marks)
+... Insert general marking feedback or answers here.
+NOTES: 5/5 = two positive and two negative impacts with a named example. 3-4/5 = both sides covered but lacks specifics. 1-2/5 = one side only. 0/5 = off topic.
+RICHTEXT: no
+WORDCOUNT: yes
+WORDLIMIT: no
+
+FILE | 1pt
+TITLE: Document Upload
+Q: 13. Upload your completed tourism case study document here.`;
+
+function loadExample() {
+  document.getElementById('template-input').value = EXAMPLE;
+  document.getElementById('quiz-title').value = 'Tasmanian Tourist Destinations Quiz';
+  document.getElementById('quiz-time').value = '30';
+  document.getElementById('quiz-attempts').value = '2';
+  document.getElementById('quiz-passcode').value = '';
+  document.getElementById('quiz-scoring').value = 'keep_highest';
+  document.getElementById('quiz-shuffle').checked = false;
+  document.getElementById('quiz-show-correct').checked = false;
+  setStatus('Example loaded. Click "Generate QTI zip" when ready.', 'info');
+}
+
+function clearAll() {
+  document.getElementById('template-input').value = '';
+  document.getElementById('quiz-title').value = '';
+  document.getElementById('quiz-time').value = '0';
+  document.getElementById('quiz-attempts').value = '1';
+  document.getElementById('quiz-passcode').value = '';
+  document.getElementById('quiz-scoring').value = 'keep_highest';
+  document.getElementById('quiz-shuffle').checked = false;
+  document.getElementById('quiz-show-correct').checked = false;
+  document.getElementById('download-btn').style.display = 'none';
+  document.getElementById('error-list').style.display = 'none';
+  setStatus('', 'info');
+}
+
+function setStatus(msg, type) {
+  const el = document.getElementById('status');
+  el.textContent = msg;
+  el.className = type;
+}
+
+// ─────────────────────────────────────────────
+// UUID generator (matching Canvas export format)
+// ─────────────────────────────────────────────
+function uuid() {
+  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, c => {
+    const r = Math.random() * 16 | 0;
+    return (c === 'x' ? r : (r & 0x3 | 0x8)).toString(16);
+  });
+}
+
+// ─────────────────────────────────────────────
+// PARSER
+// ─────────────────────────────────────────────
+// ─────────────────────────────────────────────
+// Smart block splitter — a new block starts ONLY when a line is, by itself,
+// a recognised type header (e.g. "MC | 1pt", "STIMULUS", "ENDSTIMULUS").
+// This means blank lines inside a block (e.g. paragraph breaks pasted into
+// a STIMULUS passage) are preserved as content, not misread as the start
+// of the next question. A blank line only ever acted as a separator
+// incidentally, because a new question's header line normally followed one
+// — now that's checked directly instead of assumed.
+// ─────────────────────────────────────────────
+const BLOCK_START_RE = /^(MC|TF|MATCH|MA|FITB-M|FITB|ESSAY|FILE|TEXT|ORDER|CAT|STIMULUS)\s*(?:\|\s*\d+(?:\.\d+)?pt)?\s*$/i;
+const ENDSTIMULUS_LINE_RE = /^ENDSTIMULUS\s*$/i;
+
+function splitIntoBlocks(text) {
+  const rawLines = text.split('\n');
+  const blocks = [];
+  let current = [];
+
+  rawLines.forEach(rawLine => {
+    const trimmed = rawLine.trim();
+    const isHeader = trimmed && (BLOCK_START_RE.test(trimmed) || ENDSTIMULUS_LINE_RE.test(trimmed));
+    if (isHeader && current.length) {
+      blocks.push(current.join('\n').trim());
+      current = [rawLine];
+    } else {
+      current.push(rawLine);
+    }
+  });
+  if (current.length) blocks.push(current.join('\n').trim());
+
+  return blocks.filter(b => b && !b.startsWith('#'));
+}
+
+function parseTemplate(text) {
+  const questions = [];
+  const errors = [];
+  const blocks = splitIntoBlocks(text);
+
+  // Tracks the most recently declared STIMULUS block's id. Every attachable
+  // question that follows gets tagged with parent_stimulus_item_ident until
+  // a new STIMULUS appears or an explicit ENDSTIMULUS line clears it.
+  // Confirmed mechanism from a real Canvas export with two stimulus groups.
+  let currentStimulusId = null;
+  const ATTACHABLE_TYPES = ['MC','MA','FITB','FITB-M','MATCH','ORDER','CAT','ESSAY','FILE'];
+
+  blocks.forEach((block, bi) => {
+    // STIMULUS blocks preserve blank lines (paragraph breaks) in their raw
+    // lines; every other type keeps the original behaviour of stripping
+    // blank/comment lines before field parsing, since their Q: text and
+    // options are always single-line.
+    const firstLineTrimmed = block.split('\n')[0].trim();
+    const isMultilineBlock = /^(STIMULUS|FITB-M|FITB)\b/i.test(firstLineTrimmed);
+    const lines = isMultilineBlock
+      ? block.split('\n').map(l => l.replace(/\s+$/,'')).filter(l => !l.trim().startsWith('#'))
+      : block.split('\n').map(l => l.trim()).filter(l => l && !l.startsWith('#'));
+    if (!lines.length) return;
+
+    // ENDSTIMULUS — a standalone control line, not a real question.
+    // Clears the active stimulus so subsequent questions stop attaching.
+    if (/^ENDSTIMULUS\s*$/i.test(lines[0]) && lines.length === 1) {
+      currentStimulusId = null;
+      return;
+    }
+
+    const typeMatch = lines[0].match(/^(MC|TF|MATCH|MA|FITB-M|FITB|ESSAY|FILE|TEXT|ORDER|CAT|STIMULUS)\s*(?:\|\s*(\d+(?:\.\d+)?)pt)?/i);
+    if (!typeMatch) {
+      errors.push(`Block ${bi+1}: First line must be a question type. Got: "${lines[0]}"`);
+      return;
+    }
+
+    const type = typeMatch[1].toUpperCase();
+    const pts  = typeMatch[2] ? parseFloat(typeMatch[2]) : 1;
+    const q = {
+      type, pts, title: '', question: '',
+      answers: [],       // MC, MA
+      fitb_blanks: {},   // FITB-M: { '1': [ans, ...], '2': [...] }
+      fitb_blank_modes: {},     // FITB-M: { '1': 'exact'|'contains'|'close'|'dropdown'|'wordbank' }
+      fitb_blank_distances: {}, // FITB-M: { '1': 1 } — only used for 'close' mode
+      fitb_blank_case: {},      // FITB-M: { '1': false } — false=case-sensitive (Canvas default), true=ignore case
+      fitb_answers: [],  // FITB: [ans, ...]
+      fitb_mode: 'exact',       // FITB: 'exact'|'contains'|'close'|'dropdown'|'wordbank'
+      fitb_distance: 1,         // FITB: only used for 'close' mode
+      fitb_case_sensitive: undefined, // FITB: undefined=Canvas default (sensitive), false=ignore case
+      wordbank_pool: [],        // Shared word-bank pool for the whole question (FITB and FITB-M)
+      pairs: [],         // MATCH: [{term, def, termId, defId}]
+      items: [],         // ORDER: [text]
+      labelTop: '',      // ORDER
+      labelBottom: '',   // ORDER
+      cats: [],          // CAT: [{name, items:[text], catId, itemIds:[]}]
+      general_fb: '',
+      grading_notes: '', // ESSAY only — instructor-only marking notes, shown in SpeedGrader,
+                          // never visible to students. Confirmed field: "grading_notes".
+      richtext: false, wordcount: false, wordlimit: false,
+      stimulus_instructions: '', // STIMULUS only — shown to students alongside the stimulus text
+      parent_stimulus_id: null,  // set automatically if a STIMULUS is currently active
+    };
+
+    if (type === 'STIMULUS') {
+      // STIMULUS gets dedicated handling: TITLE:/INSTRUCTIONS: are single-line
+      // fields that must appear before Q:, and everything from Q: onward
+      // (including blank lines) is captured as the passage, preserving
+      // paragraph breaks — this is what lets a teacher paste multi-paragraph
+      // text without it being misread as separate questions.
+      const bodyLines = lines.slice(1);
+      let qStarted = false;
+      let qLines = [];
+      bodyLines.forEach(line => {
+        if (!qStarted) {
+          const tm = line.match(/^TITLE:\s*(.+)/i);
+          if (tm) { q.title = tm[1].trim(); return; }
+          const instm = line.match(/^INSTRUCTIONS:\s*(.+)/i);
+          if (instm) { q.stimulus_instructions = instm[1].trim(); return; }
+          const qm = line.match(/^Q:\s*(.*)/i);
+          if (qm) { qStarted = true; qLines.push(qm[1]); return; }
+          // any other line before Q: is ignored
+          return;
+        }
+        qLines.push(line);
+      });
+      // Group into paragraphs: blank lines separate paragraphs, consecutive
+      // non-blank lines within a paragraph are joined with a space.
+      const paragraphs = [];
+      let current = [];
+      qLines.forEach(line => {
+        if (line.trim() === '') {
+          if (current.length) { paragraphs.push(current.join(' ').trim()); current = []; }
+        } else {
+          current.push(line.trim());
+        }
+      });
+      if (current.length) paragraphs.push(current.join(' ').trim());
+      // Sentinel double-newline marks paragraph breaks for the generator,
+      // which renders each paragraph as its own <p> tag.
+      q.question = paragraphs.join('\n\n');
+    } else if (type === 'FITB' || type === 'FITB-M') {
+      // FITB/FITB-M get dedicated handling too: everything from Q: onward
+      // is captured line-by-line (each line stays its own line — no merging,
+      // unlike STIMULUS's paragraph grouping), so a teacher can write each
+      // statement on its own line before its blank. A second "Q:" line is
+      // flagged as an error rather than silently overwriting the first and
+      // losing every prior line — this was the exact cause of a question
+      // silently vanishing on import (the text ended up with far fewer
+      // bracket placeholders than blanks were defined for).
+      const bodyLines = lines.slice(1);
+      let qStarted = false;
+      let qLines = [];
+      let duplicateQError = false;
+      bodyLines.forEach(line => {
+        if (!qStarted) {
+          const tm = line.match(/^TITLE:\s*(.+)/i);
+          if (tm) { q.title = tm[1].trim(); return; }
+          const qm = line.match(/^Q:\s*(.*)/i);
+          if (qm) { qStarted = true; qLines.push(qm[1]); return; }
+          return; // ignore anything else before Q:
+        }
+
+        if (/^Q:\s*/i.test(line)) {
+          duplicateQError = true;
+          return;
+        }
+
+        // Shared word-bank pool
+        const wbPool = line.match(/^WORDBANK:\s*(.+)/i);
+        if (wbPool) { q.wordbank_pool = wbPool[1].split('|').map(s=>s.trim()); return; }
+
+        if (type === 'FITB') {
+          const fitbPlain = line.match(/^\*ANS:\s*(.+)/i);
+          if (fitbPlain) { q.fitb_answers.push(fitbPlain[1].trim()); return; }
+          const fitbContains = line.match(/^\*ANS-CONTAINS:\s*(.+)/i);
+          if (fitbContains) { q.fitb_mode = 'contains'; q.fitb_answers.push(fitbContains[1].trim()); return; }
+          const fitbClose = line.match(/^\*ANS-CLOSE:\s*(.+)/i);
+          if (fitbClose) { q.fitb_mode = 'close'; q.fitb_answers.push(fitbClose[1].trim()); return; }
+          const fitbDropdown = line.match(/^\*ANS-DROPDOWN:\s*(.+)/i);
+          if (fitbDropdown) { q.fitb_mode = 'dropdown'; q.fitb_answers = fitbDropdown[1].split('|').map(s=>s.trim()); return; }
+          const fitbWordbank = line.match(/^\*ANS-WORDBANK:\s*(.+)/i);
+          if (fitbWordbank) { q.fitb_mode = 'wordbank'; q.fitb_answers = [fitbWordbank[1].trim()]; return; }
+          const fitbDist = line.match(/^DISTANCE:\s*(\d+)/i);
+          if (fitbDist) { q.fitb_distance = parseInt(fitbDist[1]); return; }
+          const fitbCase = line.match(/^CASE:\s*(ignore|sensitive)/i);
+          if (fitbCase) { q.fitb_case_sensitive = /sensitive/i.test(fitbCase[1]); return; }
+        }
+
+        if (type === 'FITB-M') {
+          const bmPlain = line.match(/^\*BLANK(\d+):\s*(.+)/i);
+          if (bmPlain) {
+            const idx = bmPlain[1];
+            if (!q.fitb_blanks[idx]) q.fitb_blanks[idx] = [];
+            if (!q.fitb_blank_modes[idx]) q.fitb_blank_modes[idx] = 'exact';
+            q.fitb_blanks[idx].push(bmPlain[2].trim());
+            return;
+          }
+          const bmContains = line.match(/^\*BLANK(\d+)-CONTAINS:\s*(.+)/i);
+          if (bmContains) {
+            const idx = bmContains[1];
+            if (!q.fitb_blanks[idx]) q.fitb_blanks[idx] = [];
+            q.fitb_blank_modes[idx] = 'contains';
+            q.fitb_blanks[idx].push(bmContains[2].trim());
+            return;
+          }
+          const bmClose = line.match(/^\*BLANK(\d+)-CLOSE:\s*(.+)/i);
+          if (bmClose) {
+            const idx = bmClose[1];
+            if (!q.fitb_blanks[idx]) q.fitb_blanks[idx] = [];
+            q.fitb_blank_modes[idx] = 'close';
+            q.fitb_blanks[idx].push(bmClose[2].trim());
+            return;
+          }
+          const bmDropdown = line.match(/^\*BLANK(\d+)-DROPDOWN:\s*(.+)/i);
+          if (bmDropdown) {
+            const idx = bmDropdown[1];
+            q.fitb_blank_modes[idx] = 'dropdown';
+            q.fitb_blanks[idx] = bmDropdown[2].split('|').map(s=>s.trim());
+            return;
+          }
+          const bmWordbank = line.match(/^\*BLANK(\d+)-WORDBANK:\s*(.+)/i);
+          if (bmWordbank) {
+            const idx = bmWordbank[1];
+            q.fitb_blank_modes[idx] = 'wordbank';
+            q.fitb_blanks[idx] = [bmWordbank[2].trim()];
+            return;
+          }
+          const bmDist = line.match(/^BLANK(\d+)-DISTANCE:\s*(\d+)/i);
+          if (bmDist) { q.fitb_blank_distances[bmDist[1]] = parseInt(bmDist[2]); return; }
+          const bmCase = line.match(/^BLANK(\d+)-CASE:\s*(ignore|sensitive)/i);
+          if (bmCase) { q.fitb_blank_case[bmCase[1]] = /sensitive/i.test(bmCase[2]); return; }
+        }
+
+        // Anything else (including blank lines) is literal continuation
+        // text — each line preserved as its own line, not merged.
+        qLines.push(line);
+      });
+
+      if (duplicateQError) {
+        errors.push(`Block ${bi+1} (${type}): Found more than one "Q:" line. Only the FIRST line of question text should start with "Q:" — every extra "Q:" line silently overwrites the previous one and can make blanks fail to import with no warning. Remove "Q:" from every line after the first; just write the line directly.`);
+        return;
+      }
+
+      q.question = qLines.join('\n');
+    } else {
+      const qLineCount = lines.slice(1).filter(l => /^Q:\s*/i.test(l)).length;
+      if (qLineCount > 1) {
+        errors.push(`Block ${bi+1} (${type}): Found ${qLineCount} lines starting with "Q:" — only the first line of question text should start with "Q:". Every extra "Q:" line silently overwrites the one before it, so only the last one actually survives — this can make a question fail to import with no visible error. Remove "Q:" from every line except the first.`);
+        return;
+      }
+      lines.slice(1).forEach(line => {
+        const qm  = line.match(/^Q:\s*(.+)/i);     if (qm)  { q.question = qm[1].trim(); return; }
+        const tm  = line.match(/^TITLE:\s*(.+)/i); if (tm)  { q.title = tm[1].trim(); return; }
+
+        // MC / MA
+        const am = line.match(/^(\*?)A:\s*(.+)/i);
+        if (am && ['MC','MA'].includes(type)) { q.answers.push({ correct: am[1]==='*', text: am[2].trim(), id: uuid() }); return; }
+
+        // Shared word-bank pool — one per question, used by any -WORDBANK blank.
+        // WORDBANK: word1 | word2 | word3 | distractor1 | distractor2
+        const wbPool = line.match(/^WORDBANK:\s*(.+)/i);
+        if (wbPool && (type==='FITB' || type==='FITB-M')) { q.wordbank_pool = wbPool[1].split('|').map(s=>s.trim()); return; }
+
+        // FITB single blank — supports mode suffix:
+        // *ANS: text                 -> exact (default). Multiple *ANS: lines = "specify correct answers"
+        // *ANS-CONTAINS: text        -> contains match
+        // *ANS-CLOSE: text           -> close enough (DISTANCE: N sets edit distance; CASE: ignore for case-insensitive)
+        // *ANS-DROPDOWN: correct | distractor1 | distractor2
+        // *ANS-WORDBANK: correct-word-from-pool   (pool defined once via WORDBANK: line above)
+        const fitbPlain = line.match(/^\*ANS:\s*(.+)/i);
+        if (fitbPlain && type==='FITB') { q.fitb_answers.push(fitbPlain[1].trim()); return; }
+        const fitbContains = line.match(/^\*ANS-CONTAINS:\s*(.+)/i);
+        if (fitbContains && type==='FITB') { q.fitb_mode = 'contains'; q.fitb_answers.push(fitbContains[1].trim()); return; }
+        const fitbClose = line.match(/^\*ANS-CLOSE:\s*(.+)/i);
+        if (fitbClose && type==='FITB') { q.fitb_mode = 'close'; q.fitb_answers.push(fitbClose[1].trim()); return; }
+        const fitbDropdown = line.match(/^\*ANS-DROPDOWN:\s*(.+)/i);
+        if (fitbDropdown && type==='FITB') { q.fitb_mode = 'dropdown'; q.fitb_answers = fitbDropdown[1].split('|').map(s=>s.trim()); return; }
+        const fitbWordbank = line.match(/^\*ANS-WORDBANK:\s*(.+)/i);
+        if (fitbWordbank && type==='FITB') { q.fitb_mode = 'wordbank'; q.fitb_answers = [fitbWordbank[1].trim()]; return; }
+        const fitbDist = line.match(/^DISTANCE:\s*(\d+)/i);
+        if (fitbDist && type==='FITB') { q.fitb_distance = parseInt(fitbDist[1]); return; }
+        const fitbCase = line.match(/^CASE:\s*(ignore|sensitive)/i);
+        if (fitbCase && type==='FITB') { q.fitb_case_sensitive = /sensitive/i.test(fitbCase[1]); return; }
+
+        // FITB-M — same suffix pattern per numbered blank:
+        // *BLANK1: text                  -> exact (default). Multiple *BLANK1: lines = "specify correct answers"
+        // *BLANK1-CONTAINS: text         -> contains match
+        // *BLANK1-CLOSE: text            -> close enough (BLANKn-DISTANCE: N, BLANKn-CASE: ignore optional)
+        // *BLANK1-DROPDOWN: correct | distractor1 | distractor2
+        // *BLANK1-WORDBANK: correct-word-from-pool  (shared pool defined once via WORDBANK: line)
+        const bmPlain = line.match(/^\*BLANK(\d+):\s*(.+)/i);
+        if (bmPlain && type==='FITB-M') {
+          const idx = bmPlain[1];
+          if (!q.fitb_blanks[idx]) q.fitb_blanks[idx] = [];
+          if (!q.fitb_blank_modes[idx]) q.fitb_blank_modes[idx] = 'exact';
+          q.fitb_blanks[idx].push(bmPlain[2].trim());
+          return;
+        }
+        const bmContains = line.match(/^\*BLANK(\d+)-CONTAINS:\s*(.+)/i);
+        if (bmContains && type==='FITB-M') {
+          const idx = bmContains[1];
+          if (!q.fitb_blanks[idx]) q.fitb_blanks[idx] = [];
+          q.fitb_blank_modes[idx] = 'contains';
+          q.fitb_blanks[idx].push(bmContains[2].trim());
+          return;
+        }
+        const bmClose = line.match(/^\*BLANK(\d+)-CLOSE:\s*(.+)/i);
+        if (bmClose && type==='FITB-M') {
+          const idx = bmClose[1];
+          if (!q.fitb_blanks[idx]) q.fitb_blanks[idx] = [];
+          q.fitb_blank_modes[idx] = 'close';
+          q.fitb_blanks[idx].push(bmClose[2].trim());
+          return;
+        }
+        const bmDropdown = line.match(/^\*BLANK(\d+)-DROPDOWN:\s*(.+)/i);
+        if (bmDropdown && type==='FITB-M') {
+          const idx = bmDropdown[1];
+          q.fitb_blank_modes[idx] = 'dropdown';
+          q.fitb_blanks[idx] = bmDropdown[2].split('|').map(s=>s.trim());
+          return;
+        }
+        const bmWordbank = line.match(/^\*BLANK(\d+)-WORDBANK:\s*(.+)/i);
+        if (bmWordbank && type==='FITB-M') {
+          const idx = bmWordbank[1];
+          q.fitb_blank_modes[idx] = 'wordbank';
+          q.fitb_blanks[idx] = [bmWordbank[2].trim()];
+          return;
+        }
+        const bmDist = line.match(/^BLANK(\d+)-DISTANCE:\s*(\d+)/i);
+        if (bmDist && type==='FITB-M') { q.fitb_blank_distances[bmDist[1]] = parseInt(bmDist[2]); return; }
+        const bmCase = line.match(/^BLANK(\d+)-CASE:\s*(ignore|sensitive)/i);
+        if (bmCase && type==='FITB-M') { q.fitb_blank_case[bmCase[1]] = /sensitive/i.test(bmCase[2]); return; }
+
+        // MATCH
+        const pm = line.match(/^PAIR:\s*(.+?)\s*\|\s*(.+)/i);
+        if (pm && type==='MATCH') { q.pairs.push({ term: pm[1].trim(), def: pm[2].trim(), termId: uuid(), defId: uuid() }); return; }
+
+        // ORDER
+        const om = line.match(/^\*ITEM:\s*(.+)/i);
+        if (om && type==='ORDER') { q.items.push({ text: om[1].trim(), id: uuid() }); return; }
+        const ltm = line.match(/^LABEL-TOP:\s*(.+)/i);
+        if (ltm && type==='ORDER') { q.labelTop = ltm[1].trim(); return; }
+        const lbm = line.match(/^LABEL-BOTTOM:\s*(.+)/i);
+        if (lbm && type==='ORDER') { q.labelBottom = lbm[1].trim(); return; }
+
+        // CAT
+        if (type==='CAT' && line.match(/^CAT:\s*/i)) {
+          const parts = line.replace(/^CAT:\s*/i,'').split('|').map(s=>s.trim());
+          const catName = parts[0];
+          const catItems = parts.slice(1).map(t => ({ text: t, id: uuid() }));
+          q.cats.push({ name: catName, items: catItems, catId: uuid() });
+          return;
+        }
+
+        // ESSAY options
+        const dotm = line.match(/^\.{3}\s*(.+)/);
+        if (dotm && type==='ESSAY') { q.general_fb = dotm[1].trim(); return; }
+        const gfm = line.match(/^GENERAL:\s*(.+)/i);
+        if (gfm && type==='ESSAY') { q.general_fb = gfm[1].trim(); return; }
+        const rtm = line.match(/^RICHTEXT:\s*(yes|no|true|false|on|off)/i);
+        if (rtm && type==='ESSAY') { q.richtext = /yes|true|on/i.test(rtm[1]); return; }
+        const wcm = line.match(/^WORDCOUNT:\s*(yes|no|true|false|on|off)/i);
+        if (wcm && type==='ESSAY') { q.wordcount = /yes|true|on/i.test(wcm[1]); return; }
+        const wlm = line.match(/^WORDLIMIT:\s*(yes|no|true|false|on|off)/i);
+        if (wlm && type==='ESSAY') { q.wordlimit = /yes|true|on/i.test(wlm[1]); return; }
+        // NOTES: instructor-only marking notes — shown in SpeedGrader only, never to students.
+        // Confirmed field from real Canvas export: "grading_notes" qtimetadatafield.
+        const notesm = line.match(/^NOTES:\s*(.+)/i);
+        if (notesm && type==='ESSAY') { q.grading_notes = notesm[1].trim(); return; }
+      });
+    }
+
+    // Validation
+    if (!q.question && type !== 'TEXT') { errors.push(`Block ${bi+1} (${type}): Missing Q: line.`); return; }
+    if (type==='MC' && !q.answers.some(a=>a.correct))   { errors.push(`Block ${bi+1} (MC): No correct answer marked with *.`); return; }
+    if (type==='MA' && !q.answers.some(a=>a.correct))   { errors.push(`Block ${bi+1} (MA): No correct answers marked with *.`); return; }
+    if (type==='FITB' && !q.fitb_answers.length)         { errors.push(`Block ${bi+1} (FITB): No *ANS: lines found.`); return; }
+    if (type==='FITB-M' && !Object.keys(q.fitb_blanks).length) { errors.push(`Block ${bi+1} (FITB-M): No *BLANK lines found.`); return; }
+    if (type==='FITB') {
+      const bracketCount = (q.question.match(/\[[^\]]+\]/g) || []).length;
+      if (bracketCount !== 1) {
+        errors.push(`Block ${bi+1} (FITB): Question text has ${bracketCount} [blank] placeholder(s) but FITB needs exactly 1. If you need more than one, use FITB-M instead. This usually happens if a "Q:" line was accidentally repeated and overwrote earlier lines — check for that.`);
+        return;
+      }
+    }
+    if (type==='FITB-M') {
+      const bracketCount = (q.question.match(/\[[^\]]+\]/g) || []).length;
+      const blankCount = Object.keys(q.fitb_blanks).length;
+      if (bracketCount !== blankCount) {
+        errors.push(`Block ${bi+1} (FITB-M): Question text has ${bracketCount} [blank] placeholder(s) but ${blankCount} *BLANK definition(s) were found — these must match exactly, or the question will import broken (or not import at all) with no visible error in Canvas. This usually happens if a "Q:" line was accidentally repeated — only the first line should start with "Q:", every line after should be written directly with no "Q:" prefix.`);
+        return;
+      }
+    }
+    if (type==='FITB' && q.fitb_mode==='wordbank' && !q.wordbank_pool.length) { errors.push(`Block ${bi+1} (FITB): -WORDBANK used but no WORDBANK: pool line found.`); return; }
+    if (type==='FITB-M' && Object.values(q.fitb_blank_modes).includes('wordbank') && !q.wordbank_pool.length) { errors.push(`Block ${bi+1} (FITB-M): -WORDBANK used but no WORDBANK: pool line found.`); return; }
+    if (type==='MATCH' && !q.pairs.length)               { errors.push(`Block ${bi+1} (MATCH): No PAIR: lines found.`); return; }
+    if (type==='ORDER' && q.items.length < 2)            { errors.push(`Block ${bi+1} (ORDER): Need at least 2 *ITEM: lines.`); return; }
+    if (type==='CAT' && q.cats.length < 2)               { errors.push(`Block ${bi+1} (CAT): Need at least 2 CAT: lines.`); return; }
+
+    q.id = 'q' + Array.from(crypto.getRandomValues(new Uint8Array(15))).map(b=>b.toString(16).padStart(2,'0')).join('');
+
+    if (type === 'STIMULUS') {
+      // This block becomes the active stimulus for subsequent attachable questions.
+      currentStimulusId = q.id;
+    } else if (ATTACHABLE_TYPES.includes(type) && currentStimulusId) {
+      q.parent_stimulus_id = currentStimulusId;
+    }
+
+    questions.push(q);
+  });
+
+  return { questions, errors };
+}
+
+// ─────────────────────────────────────────────
+// XML HELPERS
+// ─────────────────────────────────────────────
+function esc(s) {
+  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+function safeTitle(s) {
+  return esc(String(s).replace(/[^\x00-\x7F]/g,'').trim().substring(0,60));
+}
+function itemTitle(q) {
+  const t = q.title || q.question || 'Question';
+  return safeTitle(t);
+}
+// Confirmed from real Canvas export: a question attaches to a stimulus via
+// a plain qtimetadatafield naming the stimulus item's own ident. Nothing
+// fancier than that — no nesting, no special section wrapper.
+function parentStimulusField(q) {
+  return q.parent_stimulus_id
+    ? `\n      <qtimetadatafield><fieldlabel>parent_stimulus_item_ident</fieldlabel><fieldentry>${q.parent_stimulus_id}</fieldentry></qtimetadatafield>`
+    : '';
+}
+// Wrap text in <p> tags encoded for mattext
+function p(s) { return '&lt;p&gt;' + esc(s) + '&lt;/p&gt;'; }
+
+// ─────────────────────────────────────────────
+// GENERATORS — built from Canvas export XML exactly
+// ─────────────────────────────────────────────
+
+function genMC(q) {
+  const correctAnswer = q.answers.find(a => a.correct);
+  const choices = q.answers.map(a =>
+    `          <response_label ident="${a.id}">
+            <material><mattext texttype="text/html">${esc(a.text)}</mattext></material>
+          </response_label>`
+  ).join('\n');
+
+  return `  <item ident="${q.id}" title="${itemTitle(q)}">
+    <itemmetadata><qtimetadata>
+      <qtimetadatafield><fieldlabel>question_type</fieldlabel><fieldentry>multiple_choice_question</fieldentry></qtimetadatafield>
+      <qtimetadatafield><fieldlabel>points_possible</fieldlabel><fieldentry>${q.pts}</fieldentry></qtimetadatafield>
+      <qtimetadatafield><fieldlabel>original_answer_ids</fieldlabel><fieldentry>${q.answers.map(a=>a.id).join(',')}</fieldentry></qtimetadatafield>
+      <qtimetadatafield><fieldlabel>calculator_type</fieldlabel><fieldentry>none</fieldentry></qtimetadatafield>${parentStimulusField(q)}
+    </qtimetadata></itemmetadata>
+    <presentation>
+      <material><mattext texttype="text/html">${p(q.question)}</mattext></material>
+      <response_lid ident="response1" rcardinality="Single">
+        <render_choice>
+${choices}
+        </render_choice>
+      </response_lid>
+    </presentation>
+    <resprocessing>
+      <outcomes><decvar maxvalue="100" minvalue="0" varname="SCORE" vartype="Decimal"/></outcomes>
+      <respcondition continue="No">
+        <conditionvar><varequal respident="response1">${correctAnswer.id}</varequal></conditionvar>
+        <setvar action="Set" varname="SCORE">100</setvar>
+      </respcondition>
+    </resprocessing>
+  </item>`;
+}
+
+function genMA(q) {
+  const correct = q.answers.filter(a => a.correct);
+  const wrong   = q.answers.filter(a => !a.correct);
+  const choices = q.answers.map(a =>
+    `          <response_label ident="${a.id}">
+            <material><mattext texttype="text/html">${esc(a.text)}</mattext></material>
+          </response_label>`
+  ).join('\n');
+
+  const correctCond = correct.map(a => `                <varequal respident="response1">${a.id}</varequal>`).join('\n');
+  const wrongCond   = wrong.map(a =>
+    `                <not><varequal respident="response1">${a.id}</varequal></not>`
+  ).join('\n');
+
+  return `  <item ident="${q.id}" title="${itemTitle(q)}">
+    <itemmetadata><qtimetadata>
+      <qtimetadatafield><fieldlabel>question_type</fieldlabel><fieldentry>multiple_answers_question</fieldentry></qtimetadatafield>
+      <qtimetadatafield><fieldlabel>points_possible</fieldlabel><fieldentry>${q.pts}</fieldentry></qtimetadatafield>
+      <qtimetadatafield><fieldlabel>original_answer_ids</fieldlabel><fieldentry>${q.answers.map(a=>a.id).join(',')}</fieldentry></qtimetadatafield>
+      <qtimetadatafield><fieldlabel>calculator_type</fieldlabel><fieldentry>none</fieldentry></qtimetadatafield>
+      <qtimetadatafield><fieldlabel>scoring_algorithm</fieldlabel><fieldentry>PartialScore</fieldentry></qtimetadatafield>${parentStimulusField(q)}
+    </qtimetadata></itemmetadata>
+    <presentation>
+      <material><mattext texttype="text/html">${p(q.question)}</mattext></material>
+      <response_lid ident="response1" rcardinality="Multiple">
+        <render_choice>
+${choices}
+        </render_choice>
+      </response_lid>
+    </presentation>
+    <resprocessing>
+      <outcomes><decvar maxvalue="100" minvalue="0" varname="SCORE" vartype="Decimal"/></outcomes>
+      <respcondition continue="No">
+        <conditionvar>
+          <and>
+${correctCond}
+${wrongCond}
+          </and>
+        </conditionvar>
+        <setvar action="Set" varname="SCORE">100</setvar>
+      </respcondition>
+    </resprocessing>
+  </item>`;
+}
+
+// Build a single blank's response_lid XML based on its mode.
+// mode: 'exact' | 'contains' | 'close' | 'dropdown' | 'wordbank'
+// answers: array of strings. For exact/contains/close, all are accepted values.
+// For dropdown/wordbank, answers[0] is correct, the rest are distractors.
+// Build a single blank's response_lid XML based on its mode.
+// All algorithm names and attributes below are confirmed from real Canvas
+// QTI exports (a dedicated "Fill in the Blanks" reference quiz covering
+// every variant), except dropdown/wordbank structural details which are
+// now ALSO confirmed from that same export.
+//
+// options: { distance, caseSensitive, wordbankPool }
+//   wordbankPool: shared array of {text, id} — same object reused across
+//   every wordbank-mode blank in a question, since Canvas uses ONE shared
+//   draggable word pool per question, not a separate list per blank.
+function buildBlankLid(bId, mode, answers, options) {
+  options = options || {};
+
+  if (mode === 'wordbank') {
+    // WORD BANK — confirmed structure: every blank in the question shares
+    // the exact same response_label set (the shared pool). Only the
+    // respcondition's target ident differs per blank (which pool word is
+    // correct for THIS blank). scoring_algorithm="TextEquivalence",
+    // answer_type="wordbank" (lowercase), no position attribute.
+    const pool = options.wordbankPool;
+    const labels = pool.map(item =>
+      `              <response_label scoring_algorithm="TextEquivalence" answer_type="wordbank" ident="${item.id}">
+                <material><mattext texttype="text/plain">${esc(item.text)}</mattext></material>
+              </response_label>`
+    ).join('\n');
+    const correctItem = pool.find(item => item.text === answers[0]);
+    return {
+      xml: `      <response_lid ident="response_${bId}">
+        <material><mattext>${esc(answers[0])}</mattext></material>
+        <render_choice>
+${labels}
+        </render_choice>
+      </response_lid>`,
+      correctIdent: correctItem ? correctItem.id : pool[0].id,
+      answerIds: pool.map(item => item.id)
+    };
+  }
+
+  if (mode === 'dropdown') {
+    // DROPDOWN — confirmed structure: scoring_algorithm="Equivalence" (not
+    // TextEquivalence), answer_type="dropdown" (lowercase), each option has
+    // a position attribute (1-indexed), and each blank gets its OWN fresh
+    // set of option idents (not shared, unlike word bank).
+    const optionIds = answers.map(() => uuid());
+    const labels = answers.map((ans, i) =>
+      `              <response_label scoring_algorithm="Equivalence" answer_type="dropdown" ident="${optionIds[i]}" position="${i+1}">
+                <material><mattext texttype="text/plain">${esc(ans)}</mattext></material>
+              </response_label>`
+    ).join('\n');
+    return {
+      xml: `      <response_lid ident="response_${bId}">
+        <material><mattext>${esc(answers[0])}</mattext></material>
+        <render_choice>
+${labels}
+        </render_choice>
+      </response_lid>`,
+      correctIdent: optionIds[0],
+      answerIds: optionIds
+    };
+  }
+
+  // OPEN ENTRY — four confirmed modes:
+  // exact (1 answer)   -> TextEquivalence
+  // exact (2+ answers) -> TextInChoices ("specify correct answers" — multiple accepted)
+  // contains           -> TextContainsAnswer
+  // close              -> TextCloseEnough (+ levenshtein_distance, ignore_case)
+  let algorithm;
+  let extraAttrs = '';
+  if (mode === 'contains') {
+    algorithm = 'TextContainsAnswer';
+  } else if (mode === 'close') {
+    algorithm = 'TextCloseEnough';
+    const dist = options.distance || 1;
+    const ignoreCase = options.caseSensitive === false ? 'true' : 'false'; // Canvas default: case-sensitive
+    extraAttrs = ` levenshtein_distance="${dist}" ignore_case="${ignoreCase}"`;
+  } else {
+    // exact mode: algorithm depends on how many accepted answers were given
+    algorithm = answers.length > 1 ? 'TextInChoices' : 'TextEquivalence';
+  }
+
+  const answerIds = answers.map((_, i) => `${bId}-${i}`);
+  const labels = answers.map((ans, i) =>
+    `              <response_label scoring_algorithm="${algorithm}" answer_type="openEntry" ident="${bId}-${i}"${extraAttrs}>
+                <material><mattext texttype="text/plain">${esc(ans)}</mattext></material>
+              </response_label>`
+  ).join('\n');
+
+  return {
+    xml: `      <response_lid ident="response_${bId}">
+        <material><mattext>${esc(answers[0])}</mattext></material>
+        <render_choice>
+${labels}
+        </render_choice>
+      </response_lid>`,
+    correctIdent: `${bId}-0`,
+    answerIds
+  };
+}
+
+function genFITB(q) {
+  const blankId = uuid();
+  const mode    = q.fitb_mode || 'exact';
+  const answers = q.fitb_answers;
+
+  let wordbankPool = null;
+  if (mode === 'wordbank') {
+    wordbankPool = q.wordbank_pool.map(text => ({ text, id: uuid() }));
+  }
+
+  const built = buildBlankLid(blankId, mode, answers, {
+    distance: q.fitb_distance,
+    caseSensitive: q.fitb_case_sensitive,
+    wordbankPool
+  });
+
+  // Replace [label] in question with [blankId]
+  const questionText = q.question.replace(/\[.+?\]/, `[${blankId}]`);
+  // Convert literal line breaks (from multi-line pasted text) into visible <br/> tags
+  const questionHtml = esc(questionText).replace(/\n/g, '&lt;br/&gt;');
+
+  return `  <item ident="${q.id}" title="${itemTitle(q)}">
+    <itemmetadata><qtimetadata>
+      <qtimetadatafield><fieldlabel>question_type</fieldlabel><fieldentry>fill_in_multiple_blanks_question</fieldentry></qtimetadatafield>
+      <qtimetadatafield><fieldlabel>points_possible</fieldlabel><fieldentry>${q.pts}</fieldentry></qtimetadatafield>
+      <qtimetadatafield><fieldlabel>original_answer_ids</fieldlabel><fieldentry>[${built.answerIds.map(id=>`"${id}"`).join(', ')}]</fieldentry></qtimetadatafield>
+      <qtimetadatafield><fieldlabel>calculator_type</fieldlabel><fieldentry>none</fieldentry></qtimetadatafield>${parentStimulusField(q)}
+    </qtimetadata></itemmetadata>
+    <presentation>
+      <material><mattext texttype="text/html">${questionHtml}</mattext></material>
+${built.xml}
+    </presentation>
+    <resprocessing>
+      <outcomes><decvar maxvalue="100" minvalue="0" varname="SCORE" vartype="Decimal"/></outcomes>
+      <respcondition>
+        <conditionvar><varequal respident="response_${blankId}">${built.correctIdent}</varequal></conditionvar>
+        <setvar action="Add" varname="SCORE">100.00</setvar>
+      </respcondition>
+    </resprocessing>
+  </item>`;
+}
+
+function genFITBM(q) {
+  const blankNums = Object.keys(q.fitb_blanks).sort((a,b) => parseInt(a)-parseInt(b));
+  const totalPts  = blankNums.length;
+  const scorePerBlank = (100 / totalPts).toFixed(2);
+
+  const blankIds = {};
+  blankNums.forEach(n => { blankIds[n] = uuid(); });
+
+  // Single-pass global replace — avoids re-matching just-inserted UUID brackets.
+  let blankCursor = 0;
+  const questionText = q.question.replace(/\[[^\]]+\]/g, () => {
+    const n = blankNums[blankCursor];
+    blankCursor++;
+    return `[${blankIds[n]}]`;
+  });
+
+  // Build ONE shared word-bank pool for the whole question if any blank uses it —
+  // confirmed from Canvas export: all wordbank blanks in a question share the
+  // exact same draggable word pool, not a separate list each.
+  let wordbankPool = null;
+  const usesWordbank = blankNums.some(n => q.fitb_blank_modes[n] === 'wordbank');
+  if (usesWordbank) {
+    wordbankPool = q.wordbank_pool.map(text => ({ text, id: uuid() }));
+  }
+
+  const built = {};
+  blankNums.forEach(n => {
+    const mode = q.fitb_blank_modes[n] || 'exact';
+    built[n] = buildBlankLid(blankIds[n], mode, q.fitb_blanks[n], {
+      distance: q.fitb_blank_distances[n],
+      caseSensitive: q.fitb_blank_case[n],
+      wordbankPool
+    });
+  });
+
+  const responseLids = blankNums.map(n => built[n].xml).join('\n');
+
+  const conditions = blankNums.map(n => {
+    const bId = blankIds[n];
+    return `      <respcondition>
+        <conditionvar><varequal respident="response_${bId}">${built[n].correctIdent}</varequal></conditionvar>
+        <setvar action="Add" varname="SCORE">${scorePerBlank}</setvar>
+      </respcondition>`;
+  }).join('\n');
+
+  const allAnswerIds = blankNums.flatMap(n => built[n].answerIds.map(id => `"${id}"`));
+  // Convert literal line breaks (from multi-line pasted text) into visible <br/> tags
+  const questionHtml = esc(questionText).replace(/\n/g, '&lt;br/&gt;');
+
+  return `  <item ident="${q.id}" title="${itemTitle(q)}">
+    <itemmetadata><qtimetadata>
+      <qtimetadatafield><fieldlabel>question_type</fieldlabel><fieldentry>fill_in_multiple_blanks_question</fieldentry></qtimetadatafield>
+      <qtimetadatafield><fieldlabel>points_possible</fieldlabel><fieldentry>${q.pts}</fieldentry></qtimetadatafield>
+      <qtimetadatafield><fieldlabel>original_answer_ids</fieldlabel><fieldentry>[${allAnswerIds.join(', ')}]</fieldentry></qtimetadatafield>
+      <qtimetadatafield><fieldlabel>calculator_type</fieldlabel><fieldentry>none</fieldentry></qtimetadatafield>${parentStimulusField(q)}
+    </qtimetadata></itemmetadata>
+    <presentation>
+      <material><mattext texttype="text/html">${questionHtml}</mattext></material>
+${responseLids}
+    </presentation>
+    <resprocessing>
+      <outcomes><decvar maxvalue="100" minvalue="0" varname="SCORE" vartype="Decimal"/></outcomes>
+${conditions}
+    </resprocessing>
+  </item>`;
+}
+
+function genMATCH(q) {
+  const n = q.pairs.length;
+  const scoreEach = (100 / n).toFixed(2);
+
+  // Each pair: term shown as left side, all defs shown as choices
+  // response_lid ident = "response_" + defId (the correct def's id)
+  // varequal: respident="response_defId" → defId
+
+  const allDefs = q.pairs.map(p =>
+    `              <response_label ident="${p.defId}">
+                <material><mattext>${esc(p.def)}</mattext></material>
+              </response_label>`
+  ).join('\n');
+
+  const responseLids = q.pairs.map(p =>
+    `      <response_lid ident="response_${p.defId}">
+        <material><mattext texttype="text/plain">${esc(p.term)}</mattext></material>
+        <render_choice>
+${allDefs}
+        </render_choice>
+      </response_lid>`
+  ).join('\n');
+
+  const conditions = q.pairs.map(p =>
+    `      <respcondition>
+        <conditionvar><varequal respident="response_${p.defId}">${p.defId}</varequal></conditionvar>
+        <setvar action="Add" varname="SCORE">${scoreEach}</setvar>
+      </respcondition>`
+  ).join('\n');
+
+  return `  <item ident="${q.id}" title="${itemTitle(q)}">
+    <itemmetadata><qtimetadata>
+      <qtimetadatafield><fieldlabel>question_type</fieldlabel><fieldentry>matching_question</fieldentry></qtimetadatafield>
+      <qtimetadatafield><fieldlabel>points_possible</fieldlabel><fieldentry>${q.pts}</fieldentry></qtimetadatafield>
+      <qtimetadatafield><fieldlabel>original_answer_ids</fieldlabel><fieldentry>${q.pairs.map(p=>p.defId).join(',')}</fieldentry></qtimetadatafield>
+      <qtimetadatafield><fieldlabel>calculator_type</fieldlabel><fieldentry>none</fieldentry></qtimetadatafield>
+      <qtimetadatafield><fieldlabel>scoring_algorithm</fieldlabel><fieldentry>PartialDeep</fieldentry></qtimetadatafield>${parentStimulusField(q)}
+    </qtimetadata></itemmetadata>
+    <presentation>
+      <material><mattext texttype="text/html">${p(q.question)}</mattext></material>
+${responseLids}
+    </presentation>
+    <resprocessing>
+      <outcomes><decvar maxvalue="100" minvalue="0" varname="SCORE" vartype="Decimal"/></outcomes>
+${conditions}
+    </resprocessing>
+  </item>`;
+}
+
+function genORDER(q) {
+  const labels = q.items.map(item =>
+    `                  <response_label ident="${item.id}">
+                    <material><mattext texttype="text/html">${p(item.text)}</mattext></material>
+                  </response_label>`
+  ).join('\n');
+
+  const topLabel    = q.labelTop    ? `              <material position="top"><mattext>${esc(q.labelTop)}</mattext></material>\n` : '';
+  const bottomLabel = q.labelBottom ? `              <material position="bottom"><mattext>${esc(q.labelBottom)}</mattext></material>\n` : '';
+
+  // Correct order: varequal for each item in sequence
+  const correctCond = q.items.map(item =>
+    `              <varequal respident="response1">${item.id}</varequal>`
+  ).join('\n');
+
+  return `  <item ident="${q.id}" title="${itemTitle(q)}">
+    <itemmetadata><qtimetadata>
+      <qtimetadatafield><fieldlabel>question_type</fieldlabel><fieldentry>ordering_question</fieldentry></qtimetadatafield>
+      <qtimetadatafield><fieldlabel>points_possible</fieldlabel><fieldentry>${q.pts}</fieldentry></qtimetadatafield>
+      <qtimetadatafield><fieldlabel>original_answer_ids</fieldlabel><fieldentry>${q.items.map(i=>i.id).join(',')}</fieldentry></qtimetadatafield>
+      <qtimetadatafield><fieldlabel>calculator_type</fieldlabel><fieldentry>none</fieldentry></qtimetadatafield>${parentStimulusField(q)}
+    </qtimetadata></itemmetadata>
+    <presentation>
+      <material><mattext texttype="text/html">${p(q.question)}</mattext></material>
+      <response_lid ident="response1" rcardinality="Ordered">
+        <render_extension>
+${topLabel}          <ims_render_object shuffle="No">
+            <flow_label>
+${labels}
+            </flow_label>
+          </ims_render_object>
+${bottomLabel}        </render_extension>
+      </response_lid>
+    </presentation>
+    <resprocessing>
+      <outcomes><decvar defaultval="1" varname="ORDERSCORE" vartype="Integer"/></outcomes>
+      <respcondition continue="No">
+        <conditionvar>
+${correctCond}
+        </conditionvar>
+        <setvar action="Set" varname="SCORE">100</setvar>
+      </respcondition>
+    </resprocessing>
+  </item>`;
+}
+
+function genCAT(q) {
+  const n = q.cats.length;
+  const scoreEach = (100 / n).toFixed(2);
+
+  // All items across all categories (for render_choice in each category)
+  const allItems = q.cats.flatMap(c => c.items);
+  const allChoices = allItems.map(item =>
+    `              <response_label ident="${item.id}">
+                <material><mattext texttype="text/plain">${esc(item.text)}</mattext></material>
+              </response_label>`
+  ).join('\n');
+
+  // One response_lid per category
+  const responseLids = q.cats.map(cat =>
+    `      <response_lid ident="${cat.catId}" rcardinality="Multiple">
+        <material><mattext texttype="text/plain">${esc(cat.name)}</mattext></material>
+        <render_choice>
+${allChoices}
+        </render_choice>
+      </response_lid>`
+  ).join('\n');
+
+  // Scoring: each category correct = scoreEach added
+  const conditions = q.cats.map(cat => {
+    const correctIds = cat.items.map(item =>
+      `              <varequal respident="${cat.catId}">${item.id}</varequal>`
+    ).join('\n');
+    return `      <respcondition>
+        <conditionvar>
+${correctIds}
+        </conditionvar>
+        <setvar action="Add" varname="SCORE">${scoreEach}</setvar>
+      </respcondition>`;
+  }).join('\n');
+
+  return `  <item ident="${q.id}" title="${itemTitle(q)}">
+    <itemmetadata><qtimetadata>
+      <qtimetadatafield><fieldlabel>question_type</fieldlabel><fieldentry>categorization_question</fieldentry></qtimetadatafield>
+      <qtimetadatafield><fieldlabel>points_possible</fieldlabel><fieldentry>${q.pts}</fieldentry></qtimetadatafield>
+      <qtimetadatafield><fieldlabel>original_answer_ids</fieldlabel><fieldentry></fieldentry></qtimetadatafield>
+      <qtimetadatafield><fieldlabel>calculator_type</fieldlabel><fieldentry>none</fieldentry></qtimetadatafield>
+      <qtimetadatafield><fieldlabel>score_method</fieldlabel><fieldentry>partial_credit</fieldentry></qtimetadatafield>${parentStimulusField(q)}
+    </qtimetadata></itemmetadata>
+    <presentation>
+      <material><mattext texttype="text/html">${p(q.question)}</mattext></material>
+${responseLids}
+    </presentation>
+    <resprocessing>
+      <outcomes><decvar maxvalue="100" minvalue="0" varname="SCORE" vartype="Decimal"/></outcomes>
+${conditions}
+    </resprocessing>
+  </item>`;
+}
+
+function genESSAY(q) {
+  const rceVal = q.richtext  ? 'Yes' : 'No';
+  const wcVal  = q.wordcount ? 'Yes' : 'No';
+  const wlVal  = q.wordlimit ? 'Yes' : 'No';
+
+  const feedbackCondition = q.general_fb
+    ? `
+      <respcondition continue="Yes">
+        <conditionvar><other/></conditionvar>
+        <displayfeedback feedbacktype="Response" linkrefid="general_fb"/>
+      </respcondition>` : '';
+
+  const itemfeedbackXml = q.general_fb
+    ? `
+    <itemfeedback ident="general_fb">
+      <flow_mat>
+        <material><mattext texttype="text/html">&lt;p&gt;${esc(q.general_fb)}&lt;/p&gt;</mattext></material>
+      </flow_mat>
+    </itemfeedback>` : '';
+
+  return `  <item ident="${q.id}" title="${itemTitle(q)}">
+    <itemmetadata><qtimetadata>
+      <qtimetadatafield><fieldlabel>question_type</fieldlabel><fieldentry>essay_question</fieldentry></qtimetadatafield>
+      <qtimetadatafield><fieldlabel>points_possible</fieldlabel><fieldentry>${q.pts}</fieldentry></qtimetadatafield>
+      <qtimetadatafield><fieldlabel>original_answer_ids</fieldlabel><fieldentry></fieldentry></qtimetadatafield>
+      <qtimetadatafield><fieldlabel>calculator_type</fieldlabel><fieldentry>none</fieldentry></qtimetadatafield>
+      <qtimetadatafield><fieldlabel>grading_notes</fieldlabel><fieldentry>${esc(q.grading_notes || '')}</fieldentry></qtimetadatafield>${parentStimulusField(q)}
+    </qtimetadata></itemmetadata>
+    <presentation>
+      <material><mattext texttype="text/html">${p(q.question)}</mattext></material>
+      <response_str ident="response1" rcardinality="Single" rce="${rceVal}" word_count="${wcVal}" spell_check="No" word_limit_enabled="${wlVal}">
+        <render_fib>
+          <response_label ident="answer1" rshuffle="No"/>
+        </render_fib>
+      </response_str>
+    </presentation>
+    <resprocessing>
+      <outcomes><decvar maxvalue="100" minvalue="0" varname="SCORE" vartype="Decimal"/></outcomes>
+      <respcondition continue="No">
+        <conditionvar><other/></conditionvar>
+      </respcondition>${feedbackCondition}
+    </resprocessing>${itemfeedbackXml}
+  </item>`;
+}
+
+function genFILE(q) {
+  // From Canvas export: file_upload_question has no response_str, bare resprocessing
+  return `  <item ident="${q.id}" title="${itemTitle(q)}">
+    <itemmetadata><qtimetadata>
+      <qtimetadatafield><fieldlabel>question_type</fieldlabel><fieldentry>file_upload_question</fieldentry></qtimetadatafield>
+      <qtimetadatafield><fieldlabel>points_possible</fieldlabel><fieldentry>${q.pts}</fieldentry></qtimetadatafield>
+      <qtimetadatafield><fieldlabel>original_answer_ids</fieldlabel><fieldentry></fieldentry></qtimetadatafield>
+      <qtimetadatafield><fieldlabel>calculator_type</fieldlabel><fieldentry>none</fieldentry></qtimetadatafield>${parentStimulusField(q)}
+    </qtimetadata></itemmetadata>
+    <presentation>
+      <material><mattext texttype="text/html">${p(q.question)}</mattext></material>
+    </presentation>
+    <resprocessing>
+      <outcomes><decvar maxvalue="100" minvalue="0" varname="SCORE" vartype="Decimal"/></outcomes>
+    </resprocessing>
+  </item>`;
+}
+
+function genTEXT(q) {
+  // From Canvas export: text_only_question with instructions="" attribute,
+  // orientation="top" on material, points_possible=0.
+  // IMPORTANT: passage=true is confirmed required — verified against a
+  // standalone Canvas-created text block export with zero other questions
+  // attached. Canvas's exporter always includes this field for this question
+  // type; it is not a "this groups other questions" flag. Removing it caused
+  // the text to not render at all. It must stay in.
+  const titleAttr = q.title ? safeTitle(q.title) : '.';
+  return `  <item ident="${q.id}" title="${titleAttr}" instructions="">
+    <itemmetadata><qtimetadata>
+      <qtimetadatafield><fieldlabel>question_type</fieldlabel><fieldentry>text_only_question</fieldentry></qtimetadatafield>
+      <qtimetadatafield><fieldlabel>points_possible</fieldlabel><fieldentry>0</fieldentry></qtimetadatafield>
+      <qtimetadatafield><fieldlabel>original_answer_ids</fieldlabel><fieldentry></fieldentry></qtimetadatafield>
+      <qtimetadatafield><fieldlabel>calculator_type</fieldlabel><fieldentry>none</fieldentry></qtimetadatafield>
+      <qtimetadatafield><fieldlabel>passage</fieldlabel><fieldentry>true</fieldentry></qtimetadatafield>
+    </qtimetadata></itemmetadata>
+    <presentation>
+      <material orientation="top">
+        <mattext texttype="text/html">${p(q.question)}</mattext>
+      </material>
+    </presentation>
+  </item>`;
+}
+
+function genSTIMULUS(q) {
+  // Confirmed from real Canvas export: a genuine stimulus (attached to
+  // questions) differs from a plain TEXT block in three ways:
+  //   1. passage: false (plain text blocks use true — counterintuitive but confirmed)
+  //   2. an instructions="..." attribute on the <item> tag, shown to students
+  //   3. it's referenced by other questions via parent_stimulus_item_ident
+  // orientation="left" gives the classic split-pane (text left, questions
+  // right) layout — change to "top" manually in Canvas if you prefer stacked.
+  const titleAttr = q.title ? safeTitle(q.title) : 'Stimulus';
+  // q.question may contain multiple paragraphs separated by a blank-line
+  // sentinel (\n\n) — each becomes its own <p> tag so pasted passages with
+  // paragraph breaks render properly instead of running together.
+  const paragraphsHtml = q.question.split('\n\n')
+    .map(para => `&lt;p&gt;${esc(para)}&lt;/p&gt;`)
+    .join('');
+  return `  <item ident="${q.id}" title="${titleAttr}" instructions="${esc(q.stimulus_instructions || '')}">
+    <itemmetadata><qtimetadata>
+      <qtimetadatafield><fieldlabel>question_type</fieldlabel><fieldentry>text_only_question</fieldentry></qtimetadatafield>
+      <qtimetadatafield><fieldlabel>points_possible</fieldlabel><fieldentry>0</fieldentry></qtimetadatafield>
+      <qtimetadatafield><fieldlabel>original_answer_ids</fieldlabel><fieldentry></fieldentry></qtimetadatafield>
+      <qtimetadatafield><fieldlabel>calculator_type</fieldlabel><fieldentry>none</fieldentry></qtimetadatafield>
+      <qtimetadatafield><fieldlabel>passage</fieldlabel><fieldentry>false</fieldentry></qtimetadatafield>
+    </qtimetadata></itemmetadata>
+    <presentation>
+      <material orientation="left">
+        <mattext texttype="text/html">${paragraphsHtml}</mattext>
+      </material>
+    </presentation>
+  </item>`;
+}
+
+function generateItem(q) {
+  switch(q.type) {
+    case 'MC':       return genMC(q);
+    case 'MA':       return genMA(q);
+    case 'FITB':     return genFITB(q);
+    case 'FITB-M':   return genFITBM(q);
+    case 'MATCH':    return genMATCH(q);
+    case 'ORDER':    return genORDER(q);
+    case 'CAT':      return genCAT(q);
+    case 'ESSAY':    return genESSAY(q);
+    case 'FILE':     return genFILE(q);
+    case 'TEXT':     return genTEXT(q);
+    case 'STIMULUS': return genSTIMULUS(q);
+    default: return '';
+  }
+}
+
+// ─────────────────────────────────────────────
+// ASSESSMENT META XML
+// ─────────────────────────────────────────────
+function buildAssessmentMeta(assessId, settings) {
+  const timeLimit = parseInt(settings.timeLimit) || 0;
+  const attempts  = parseInt(settings.attempts)  || 1;
+  const passcode  = settings.passcode ? `<access_code>${esc(settings.passcode)}</access_code>` : '<access_code/>';
+
+  return `<?xml version="1.0"?>
+<quiz xmlns="http://canvas.instructure.com/xsd/cccv1p0"
+  xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+  xsi:schemaLocation="http://canvas.instructure.com/xsd/cccv1p0 https://canvas.instructure.com/xsd/cccv1p0.xsd"
+  identifier="${assessId}">
+  <title>${esc(settings.title)}</title>
+  <description/>
+  <due_at/><lock_at/><unlock_at/>
+  <shuffle_questions>false</shuffle_questions>
+  <shuffle_answers>${settings.shuffle ? 'true' : 'false'}</shuffle_answers>
+  <calculator_type>none</calculator_type>
+  <scoring_policy>${settings.scoring || 'keep_highest'}</scoring_policy>
+  <hide_results/>
+  <quiz_type>assignment</quiz_type>
+  <allowed_attempts>${attempts === 0 ? -1 : attempts}</allowed_attempts>
+  ${passcode}
+  <show_correct_answers>${settings.showCorrect ? 'true' : 'false'}</show_correct_answers>
+  <anonymous_submissions>false</anonymous_submissions>
+  <time_limit>${timeLimit > 0 ? timeLimit : ''}</time_limit>
+  <one_question_at_a_time>false</one_question_at_a_time>
+  <cant_go_back>false</cant_go_back>
+  <available>false</available>
+  <one_time_results>false</one_time_results>
+  <only_visible_to_overrides>false</only_visible_to_overrides>
+</quiz>`;
+}
+
+// ─────────────────────────────────────────────
+// MANIFEST XML
+// ─────────────────────────────────────────────
+function buildManifest(assessId, manifestId) {
+  return `<?xml version="1.0"?>
+<manifest xmlns="http://www.imsglobal.org/xsd/imsccv1p1/imscp_v1p1"
+  xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+  identifier="${manifestId}"
+  xsi:schemaLocation="http://www.imsglobal.org/xsd/imsccv1p1/imscp_v1p1 http://www.imsglobal.org/xsd/imscp_v1p1.xsd">
+  <metadata><schema>IMS Content</schema><schemaversion>1.1.3</schemaversion></metadata>
+  <organizations/>
+  <resources>
+    <resource identifier="${assessId}" type="imsqti_xmlv1p2">
+      <file href="${assessId}/${assessId}.xml"/>
+      <dependency identifierref="${assessId}_meta"/>
+    </resource>
+    <resource identifier="${assessId}_meta" type="associatedcontent/imscc_xmlv1p1/learning-application-resource" href="${assessId}/assessment_meta.xml">
+      <file href="${assessId}/assessment_meta.xml"/>
+    </resource>
+  </resources>
+</manifest>`;
+}
+
+// ─────────────────────────────────────────────
+// QTI ASSESSMENT XML
+// ─────────────────────────────────────────────
+function buildQuizXml(assessId, settings, items) {
+  const timeLimit = parseInt(settings.timeLimit) || 0;
+  const attempts  = parseInt(settings.attempts)  || 1;
+  const timeMeta  = timeLimit > 0 ? `\n      <qtimetadatafield><fieldlabel>qmd_timelimit</fieldlabel><fieldentry>${timeLimit}</fieldentry></qtimetadatafield>` : '';
+
+  return `<?xml version="1.0"?>
+<questestinterop xmlns="http://www.imsglobal.org/xsd/ims_qtiasiv1p2"
+  xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+  xsi:schemaLocation="http://www.imsglobal.org/xsd/ims_qtiasiv1p2 http://www.imsglobal.org/xsd/ims_qtiasiv1p2p1.xsd">
+  <assessment ident="${assessId}" title="${esc(settings.title)}">
+    <qtimetadata>${timeMeta}
+      <qtimetadatafield><fieldlabel>cc_maxattempts</fieldlabel><fieldentry>${attempts === 0 ? -1 : attempts}</fieldentry></qtimetadatafield>
+    </qtimetadata>
+    <section ident="root_section">
+${items}
+    </section>
+  </assessment>
+</questestinterop>`;
+}
+
+// ─────────────────────────────────────────────
+// MAIN BUILD
+// ─────────────────────────────────────────────
+// Cleans up common artifacts from AI-generated text (e.g. a Copilot agent
+// converting a worksheet) before parsing: markdown code fences, smart
+// quotes/dashes that would silently break exact-match answers, and stray
+// leading/trailing whitespace.
+function sanitizeInput(text) {
+  let t = text;
+  // Strip a wrapping markdown code fence if the whole paste is fenced
+  t = t.replace(/^```[a-zA-Z]*\n?/,'').replace(/```\s*$/,'');
+  // Normalise smart quotes and dashes to plain ASCII equivalents
+  t = t.replace(/[\u2018\u2019]/g, "'")
+       .replace(/[\u201C\u201D]/g, '"')
+       .replace(/[\u2013\u2014]/g, '-')
+       .replace(/\u2026/g, '...');
+  // Trim trailing whitespace on each line (leading whitespace preserved
+  // intentionally, since some lines may be meaningfully indented)
+  t = t.split('\n').map(line => line.replace(/\s+$/,'')).join('\n');
+  return t.trim();
+}
+
+async function buildQTI() {
+  const rawText = sanitizeInput(document.getElementById('template-input').value);
+  const errEl   = document.getElementById('error-list');
+  const dlBtn   = document.getElementById('download-btn');
+
+  errEl.style.display = 'none';
+  dlBtn.style.display = 'none';
+  setStatus('Parsing questions…', 'info');
+
+  if (!rawText) { setStatus('Paste some questions first.', 'error'); return; }
+
+  const { questions, errors } = parseTemplate(rawText);
+
+  if (errors.length) {
+    errEl.innerHTML = `<strong>Fix these issues before generating:</strong><ul>${errors.map(e=>`<li>${e}</li>`).join('')}</ul>`;
+    errEl.style.display = 'block';
+    setStatus(`${errors.length} error(s) found.`, 'error');
+    return;
+  }
+  if (!questions.length) { setStatus('No valid questions found.', 'error'); return; }
+
+  setStatus(`Building ${questions.length} question(s)…`, 'info');
+
+  const title       = document.getElementById('quiz-title').value.trim() || 'Canvas Quiz';
+  const settings    = {
+    title,
+    timeLimit:   document.getElementById('quiz-time').value,
+    attempts:    document.getElementById('quiz-attempts').value,
+    passcode:    document.getElementById('quiz-passcode').value.trim(),
+    scoring:     document.getElementById('quiz-scoring').value,
+    shuffle:     document.getElementById('quiz-shuffle').checked,
+    showCorrect: document.getElementById('quiz-show-correct').checked,
+  };
+
+  const assessId   = 'g' + Array.from(crypto.getRandomValues(new Uint8Array(15))).map(b=>b.toString(16).padStart(2,'0')).join('');
+  const manifestId = Array.from(crypto.getRandomValues(new Uint8Array(16))).map(b=>b.toString(16).padStart(2,'0')).join('');
+
+  const items       = questions.map(generateItem).join('\n\n');
+  const quizXml     = buildQuizXml(assessId, settings, items);
+  const metaXml     = buildAssessmentMeta(assessId, settings);
+  const manifestXml = buildManifest(assessId, manifestId);
+
+  try {
+    const zip      = new JSZip();
+    zip.file('imsmanifest.xml', manifestXml);
+    zip.file(`${assessId}/${assessId}.xml`, quizXml);
+    zip.file(`${assessId}/assessment_meta.xml`, metaXml);
+
+    const safeT    = title.replace(/[^a-zA-Z0-9]/g,'_').toLowerCase().substring(0,40);
+    const filename = `${safeT}_qti.zip`;
+    const blob     = await zip.generateAsync({ type: 'blob', compression: 'DEFLATE' });
+    const url      = URL.createObjectURL(blob);
+
+    dlBtn.onclick = () => { const a = document.createElement('a'); a.href=url; a.download=filename; a.click(); };
+    dlBtn.style.display = 'inline-block';
+    dlBtn.textContent   = `⬇ Download ${filename}`;
+    setStatus(`✓ ${questions.length} question(s) ready.`, 'success');
+  } catch(e) {
+    setStatus('ZIP generation failed: ' + e.message, 'error');
+  }
+}
+</script>
+</body>
+</html>
