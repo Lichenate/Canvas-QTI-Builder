@@ -105,6 +105,12 @@ https://github.com/nodeca/pako/blob/main/LICENSE
   .tip strong { color: #ffffff; font-weight: 600; }
   .type-chips { display: flex; flex-wrap: wrap; gap: 6px; }
   .chip { font-size: 10px; font-weight: 600; letter-spacing: 0.06em; padding: 3px 9px; border-radius: 20px; background: rgba(129,140,248,0.18); color: #c7d2fe; text-transform: uppercase; }
+  .chip-insert { border: none; cursor: pointer; font-family: var(--font); transition: background 0.12s, color 0.12s; }
+  .chip-insert:hover { background: var(--accent); color: #ffffff; }
+  .chip-insert:active { transform: translateY(1px); }
+  .chip-insert:focus-visible { outline: 2px solid #c7d2fe; outline-offset: 2px; }
+  .chip-insert[data-insert-type="ENDSTIMULUS"] { background: rgba(251,146,60,0.2); color: #fed7aa; }
+  .chip-insert[data-insert-type="ENDSTIMULUS"]:hover { background: #ea580c; color: #ffffff; }
   .insert-btn { font-size: 11px; font-weight: 600; padding: 5px 10px; border: 1px solid rgba(255,255,255,0.18); border-radius: 8px; background: transparent; color: #94a3b8; cursor: pointer; transition: all 0.12s; font-family: var(--font); }
   .insert-btn:hover { background: rgba(255,255,255,0.08); color: #ffffff; }
 
@@ -115,13 +121,20 @@ https://github.com/nodeca/pako/blob/main/LICENSE
     .editor-panel { padding: 20px; }
     .settings-grid, .assessment-grid, .not-recommended-row { grid-template-columns: 1fr; }
   }
+
+  /* v1.6 - insert buttons in format guide */
+  .ref-wrap { position: relative; }
+  .ref-wrap .ref-insert { position: absolute; top: 6px; right: 6px; font-family: var(--font); font-size: 10px; font-weight: 700; letter-spacing: 0.04em; padding: 4px 9px; border: none; border-radius: 6px; background: var(--accent); color: #fff; cursor: pointer; opacity: 0.85; }
+  .ref-wrap .ref-insert:hover { opacity: 1; background: var(--accent-dark); }
+  .ref-wrap .ref-block { padding-right: 70px; }
+  #template-input.flash { box-shadow: 0 0 0 3px rgba(16,185,129,0.35); border-color: var(--ok); }
 </style>
 </head>
 <body>
 
 <header>
   <h1>Canvas QTI Builder 🛟</h1>
-  <span>for New Quizzes · by David Rochester · Version 1.5 </span>
+  <span>for New Quizzes · by David Rochester · Version 1.6 </span>
 </header>
 
 <div class="layout">
@@ -179,6 +192,7 @@ use Canvas QTI Builder Formatter agent (Copilot) to generate question structure
     </div>
 
     <div class="actions">
+      <label style="display:flex;align-items:center;gap:6px;font-size:12px;font-weight:500;cursor:pointer;"><input type="checkbox" id="auto-dividers" checked style="accent-color:var(--accent);" />Auto orange dividers + submit note</label>
       <button class="btn btn-secondary" onclick="loadExample()">Load example</button>
       <button class="btn btn-secondary" onclick="clearAll()">Clear</button>
       <button class="btn btn-primary" onclick="buildQTI()">Generate QTI zip</button>
@@ -194,12 +208,18 @@ use Canvas QTI Builder Formatter agent (Copilot) to generate question structure
     <div class="ref-section">
       <h3>Question types</h3>
       <div class="type-chips">
-        <span class="chip">MC</span><span class="chip">MA</span>
-        <span class="chip">FITB</span><span class="chip">FITB-M</span>
-        <span class="chip">MATCH</span><span class="chip">ORDER</span>
-        <span class="chip">CAT</span><span class="chip">ESSAY</span>
-        <span class="chip">FILE</span><span class="chip">TEXT</span>
-        <span class="chip">STIMULUS</span>
+        <button type="button" class="chip chip-insert" data-insert-type="MC" title="Insert MC into the editor">MC</button>
+        <button type="button" class="chip chip-insert" data-insert-type="MA" title="Insert MA into the editor">MA</button>
+        <button type="button" class="chip chip-insert" data-insert-type="FITB" title="Insert FITB into the editor">FITB</button>
+        <button type="button" class="chip chip-insert" data-insert-type="FITB-M" title="Insert FITB-M into the editor">FITB-M</button>
+        <button type="button" class="chip chip-insert" data-insert-type="MATCH" title="Insert MATCH into the editor">MATCH</button>
+        <button type="button" class="chip chip-insert" data-insert-type="ORDER" title="Insert ORDER into the editor">ORDER</button>
+        <button type="button" class="chip chip-insert" data-insert-type="CAT" title="Insert CAT into the editor">CAT</button>
+        <button type="button" class="chip chip-insert" data-insert-type="ESSAY" title="Insert ESSAY into the editor">ESSAY</button>
+        <button type="button" class="chip chip-insert" data-insert-type="FILE" title="Insert FILE into the editor">FILE</button>
+        <button type="button" class="chip chip-insert" data-insert-type="TEXT" title="Insert TEXT into the editor">TEXT</button>
+        <button type="button" class="chip chip-insert" data-insert-type="STIMULUS" title="Insert STIMULUS into the editor">STIMULUS</button>
+        <button type="button" class="chip chip-insert" data-insert-type="ENDSTIMULUS" title="Insert ENDSTIMULUS into the editor">ENDSTIMULUS</button>
       </div>
     </div>
 
@@ -1529,7 +1549,7 @@ function genTEXT(q) {
     </qtimetadata></itemmetadata>
     <presentation>
       <material orientation="top">
-        <mattext texttype="text/html">${p(q.question)}</mattext>
+        <mattext texttype="text/html">${q.rawHtml ? esc(q.question) : p(q.question)}</mattext>
       </material>
     </presentation>
   </item>`;
@@ -1852,7 +1872,25 @@ async function buildQTI() {
   }
   if (!questions.length) { setStatus('No valid questions found.', 'error'); return; }
 
-  setStatus(`Building ${questions.length} question(s)…`, 'info');
+  const realCount = questions.filter(q => q.type !== 'TEXT' && q.type !== 'STIMULUS').length;
+
+  // Auto orange dividers between stimuli + submit note at the end
+  if (document.getElementById('auto-dividers').checked) {
+    const newId = () => 'q' + Array.from(crypto.getRandomValues(new Uint8Array(15))).map(b=>b.toString(16).padStart(2,'0')).join('');
+    const mkText = html => ({ type:'TEXT', pts:0, title:'', question: html, rawHtml:true, id:newId(), answers:[], parent_stimulus_id:null });
+    const HR = '<hr style="border: 0; border-top: 5px solid #f36c21;" />';
+    const withDividers = [];
+    questions.forEach((q, i) => {
+      if (q.type === 'STIMULUS' && i > 0) withDividers.push(mkText(HR));
+      withDividers.push(q);
+    });
+    withDividers.push(mkText(HR));
+    withDividers.push(mkText("<p>When finished, click 'submit' \u279C</p>"));
+    questions.length = 0;
+    withDividers.forEach(q => questions.push(q));
+  }
+
+  setStatus(`Building ${realCount} question(s)…`, 'info');
 
   const title       = document.getElementById('quiz-title').value.trim() || 'Canvas Quiz';
   const settings    = {
@@ -1894,11 +1932,79 @@ async function buildQTI() {
     dlBtn.onclick = () => { const a = document.createElement('a'); a.href=url; a.download=filename; a.click(); };
     dlBtn.style.display = 'inline-block';
     dlBtn.textContent   = `⬇ Download ${filename}`;
-    setStatus(`✓ ${questions.length} question(s) ready.`, 'success');
+    setStatus(`✓ ${realCount} question(s) ready.`, 'success');
   } catch(e) {
     setStatus('ZIP generation failed: ' + e.message, 'error');
   }
 }
+</script>
+
+<script>
+// v1.6 - Insert format-guide examples into the editor
+(function () {
+  var ta = document.getElementById('template-input');
+  var touched = false;   // has the user placed a caret in the editor yet?
+  ['click', 'keyup'].forEach(function (ev) { ta.addEventListener(ev, function () { touched = true; }); });
+
+  function insertBlock(text) {
+    text = text.replace(/\s+$/, '');
+    var v = ta.value;
+    var pos = v.length;
+    if (touched && v.trim() !== '') {
+      // insert AFTER the block (blank-line separated) the caret is sitting in
+      var idx = v.indexOf('\n\n', ta.selectionStart);
+      pos = idx === -1 ? v.length : idx;
+    }
+    var before = v.slice(0, pos).replace(/\s+$/, '');
+    var after = v.slice(pos).replace(/^\s+/, '');
+    var prefix = before ? before + '\n\n' : '';
+    var start = prefix.length;
+    ta.value = prefix + text + (after ? '\n\n' + after : '\n');
+
+    // select the text after the first "Q:" so it can be typed over
+    var m = /^Q:[ \t]*/m.exec(text);
+    var selStart = start + (m ? m.index + m[0].length : text.length);
+    var lineEnd = m ? ta.value.indexOf('\n', selStart) : selStart;
+    ta.focus();
+    ta.setSelectionRange(selStart, lineEnd === -1 ? ta.value.length : lineEnd);
+    touched = true;
+
+    // scroll the new block into view
+    var lineH = parseFloat(getComputedStyle(ta).lineHeight) || 28;
+    var lineNo = ta.value.slice(0, start).split('\n').length - 1;
+    ta.scrollTop = Math.max(0, lineNo * lineH - ta.clientHeight / 3);
+    ta.classList.add('flash');
+    setTimeout(function () { ta.classList.remove('flash'); }, 500);
+    if (typeof setStatus === 'function') setStatus(m ? 'Block inserted - edit the highlighted text, then Generate QTI zip.' : 'Inserted.', 'info');
+  }
+
+  document.querySelectorAll('.ref-panel .ref-block').forEach(function (block) {
+    var wrap = document.createElement('div');
+    wrap.className = 'ref-wrap';
+    block.parentNode.insertBefore(wrap, block);
+    wrap.appendChild(block);
+    var btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'ref-insert';
+    btn.textContent = '\u2199 Insert';
+    btn.title = 'Insert this example into the editor';
+    btn.addEventListener('click', function () { insertBlock(block.textContent); });
+    wrap.appendChild(btn);
+  });
+
+  // Type badges at the top of the guide insert their type's first example
+  document.querySelectorAll('.chip-insert').forEach(function (chip) {
+    chip.addEventListener('click', function () {
+      var type = chip.getAttribute('data-insert-type');
+      if (type === 'ENDSTIMULUS') { insertBlock('ENDSTIMULUS'); return; }
+      var blocks = document.querySelectorAll('.ref-panel .ref-block');
+      for (var i = 0; i < blocks.length; i++) {
+        var kw = blocks[i].querySelector('.kw');
+        if (kw && kw.textContent.trim() === type) { insertBlock(blocks[i].textContent); return; }
+      }
+    });
+  });
+})();
 </script>
 </body>
 </html>
